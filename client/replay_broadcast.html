@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cogame-halite — Broadcast Replay</title>
+<style>
+/* ============================================================
+   Ink & Print — warm CRT-phosphor arena broadcast.
+   Palette (never pure black/white): stage #16110d→#241a12,
+   paper #f2e8d8, ink #2a1f16, red #e0523a, blue #3f7cc4,
+   amber #e8a33d, ghost #8a7f72. Typography + weight + whitespace
+   carry hierarchy; strokes are warm-dark, minimal, reserved-slot.
+   ============================================================ */
+@font-face {
+  font-family: 'nes-pixel';
+  src: url(data:font/ttf;base64,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AXr+hgATAXsBev0LAvX+hgATAXsAAPyyA4AAAPyAAAAAAgCAAAACgAQAAAMADwAAAQEBAQEBAQEBAQEBAQEBAQEAAAABAAAA/wAAAP+AAAAAgAAAAQAAAACAAAD/gAAAAAABAAAA/wABgACAAAABgAAAAIAAAP+AAAD+gAAA/4AAAgEAAoACgAQAAAMABwAAAQEBAQEBAQEBAAAAAIAAAACAAAAAgAAAAoABgAAA/oAAAAGAAAD+gAACAAAAgAOABAAAAwAfAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQIAAAD/gAAA/wAAAP+AAAAAgAAA/4AAAACAAAABAAAAAIAAAAEAAAAAgAAA/4AAAACAAAD/gAAA/wAAAP+AAAABgAGAAAD+gP8AAIAAAACAAAABgAAAAIAAAACAAAD/gAAAAIAAAP+AAAD/gAAA/oAAAP+AAAD/gAAAAIAAAP+AAAMAAAAAA4AEAAADAAcAIwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAoAAAP+AAAD+AAAAAIAAAACAAAD/AAAAAQAAAP+AAAAAgAAA/4AAAACAAAABAAAAAYAAAP6AAAABAAAAAIAAAP+AAAD/AAAAAQABAAAA/wABgACAAAD/gP2AAIAAAACAAAABAAAAAIAAAACAAAAAgAAAAIAAAP+AAAD/gAAA/4AAAP+AAAD/AAAA/4AAAP+AAAAACwAAAIADgAQAAAMABwALAA8AEwAXABsAHwAjACcAKwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAAAIAAAAAAAAAAgAAAAgAAAP+AAAD+gAAAAIAAAACAAAABgAAA/gAAAACAAAAAAAAAAIAAAP6AAAD/gAAAAgAAAACAAAD9AAAAAYAAAAGAAAAAgAAAAIAAgAAA/4AAgACAAAD/gAAAAIAAAP+AAIAAgAAA/4D/AAGAAAD+gAGAAIAAAP+AAIAAgAAA/4AAgACAAAD/gAAAAIAAAP+A/4ABgAAA/oABAACAAAD/gAAAAAMAAACAA4AEAAADAAcAHwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEDAAAAAIAAAP+AAAAAgAAA/QAAAP+AAAAAgAAAAIAAAACAAAABgAAA/wAAAP8AAAABAAAAAIAAAACAAAD/gAAAAIAAgAAA/4ABAAEAAAD/AP8AAIAAAAEAAAAAgAAAAQAAAACAAAD/gAAA/oAAAP8AAAABAAAA/4AAAP+AAAD/gAAAAAEBgAKAAgAEAAADAAABAQEBAYAAAACAAAACgAGAAAD+gAAAAAEBAACAAoAEAAALAAABAQEBAQEBAQEBAQEBgAAA/4AAAACAAAABAAAA/4AAAACAAAAAgACAAAACgAAAAIAAAP+AAAD9gAAA/4AAAAABAQAAgAKABAAACwAAAQEBAQEBAQEBAQEBAQAAAACAAAD/gAAAAQAAAACAAAD/gAAAAIAAgAAAAoAAAACAAAD/gAAA/YAAAP+AAAAAAQAAAIADgAQAACsAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAAAAAACAAAAAgAAA/wAAAAEAAAD/gAAA/4AAAAEAAAAAgAAAAIAAAACAAAABAAAA/4AAAP+AAAABAAAA/wAAAACAAAAAgAAA/wAAAP+AAAD/gAAA/4AAAACAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAP+AAAD/gAAAAIAAAACAAAD/gAAA/4AAAP+AAAD/gAAA/4AAAP+AAAD/gAAAAIAAAACAAAD/gAAA/4AAAAABAIAAgAOABAAACwAAAQEBAQEBAQEBAQEBAYAAAP8AAAABAAAAAQAAAAEAAAD/AAAAAIABgAAAAIAAAAGAAAD+gAAA/4AAAP6AAAAAAQCAAAACAAGAAAcAAAEBAQEBAQEBAIAAAACAAAABAAAA/4AAAAAAAIAAAAEAAAD/AAAA/4AAAAABAIACAAOAAoAAAwAAAQEBAQCAAAADAAAAAgAAgAAA/4AAAAABAQAAgAIAAYAAAwAAAQEBAQEAAAABAAAAAIABAAAA/wAAAAAHAAAAgAOABAAAAwAHAAsADwATABcAGwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAIAAgAAA/4AAgACAAAD/gACAAIAAAP+AAIAAgAAA/4AAgACAAAD/gACAAIAAAP+AAIAAgAAA/4AAAAACAAAAgAOABAAADQAbAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQAAAP+AAAD/gAAAAIAAAACAAAAAgAAAAQAAAAAAAAD/gAAA/wAAAAGAAAAAgAAAAIAAAP+AAAAAgACAAAAAgAAAAYAAAACAAAD+AAAA/4AAAP+AAIACAAAAAIAAAACAAAD/gAAA/4AAAP6AAAD/gAABAIAAgAOABAAACwAAAQEBAQEBAQEBAQEBAIAAAAEAAAD/gAAAAIAAAAEAAAABAAAAAIAAgAAAAgAAAACAAAAAgAAA/QAAAP+AAAAAAQAAAIADgAQAABsAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAAAIAAAACAAAABAAAAAIAAAP6AAAD/AAAAAIAAAAKAAAAAgAAA/4AAAP+AAAD/AAAAAgAAAACAAQAAAACAAAAAgAAAAIAAAACAAAD/gAAAAIAAAACAAAD/gAAA/wAAAP+AAAD/gAAA/4AAAP+AAAAAAQAAAIADgAQAABsAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAgAAA/4AAAAEAAAABgAAA/oAAAACAAAAAgAAA/gAAAAOAAAD/gAAA/4AAAACAAAAAgAAA/4AAAACAAIAAAACAAAD/gAAAAQAAAACAAAAAgAAAAIAAAACAAAD/gAAA/4AAAP+AAAD/gAAA/wAAAP+AAAAAAgAAAIADgAQAAAUAFQAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQIAAAD/gAAA/4AAAAEAAAD+AAAAAIAAAACAAAAAgAAAAYAAAACAAAD/gAAAAgABAAAA/4AAAP+A/oABAAAAAQAAAACAAAAAgAAAAIAAAP4AAAD/gAAA/wAAAAABAAAAgAOABAAAEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEAgAAA/4AAAAEAAAABgAAA/YAAAAMAAAD+AAAAAgAAAACAAAD/gAAAAIAAgAAAAIAAAP+AAAABgAAAAYAAAP+AAAD/gAAA/4AAAP6AAAD/gAAAAAIAAACAA4AEAAADABcAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQKAAAD+gAAA/4AAAP+AAAAAgAAAAIAAAAIAAAD+gAAA/4AAAAIAAAAAgAAA/4AAAAEAAQAAAP8A/4AAgAAAAgAAAACAAAAAgAAA/4AAAP+AAAD/gAAA/4AAAP8AAAD/gAABAAAAgAOABAAAEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAAAAAIAAAACAAAAAgAAA/oAAAP8AAAADgAAA/4AAAP+AAAD/gAAAAIABgAAAAIAAAACAAAAAgAAA/4AAAAEAAAD/AAAA/4AAAP+AAAD+gAAAAAMAAACAA4AEAAADAAcAGwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQKAAAD+gAAAAYAAAP6AAAD/gAAA/4AAAACAAAD/gAAAAIAAAAKAAAAAgAAA/4AAAACAAAD/gAAAAQABAAAA/wABgAEAAAD/AP4AAIAAAAEAAAAAgAAAAQAAAACAAAD/gAAA/wAAAP+AAAD/AAAA/4AAAAACAAAAgAOABAAAAwAXAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQECgAAA/oAAAP+AAAABgAAAAIAAAP4AAAD/gAAAAIAAAAKAAAAAgAAA/4AAAP+AAAACgAEAAAD/AP4AAIAAAACAAAAAgAAAAIAAAAEAAAAAgAAA/4AAAP4AAAD/gAAA/4AAAgEAAIACAAOAAAMABwAAAQEBAQEBAQEBAAAAAQAAAP8AAAABAAAAAIABAAAA/wACAAEAAAD/AAADAQAAAAIAAwAAAwAJAA0AAAEBAQEBAQEBAQEBAQEBAQAAAACAAAAAAAAA/4AAAAEAAAD/AAAAAQAAAAAAAIAAAP+AAIAAgAAAAIAAAP8AAYABAAAA/wAAAQAAAIADgAQAABsAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBgAAA/4AAAP+AAAD/gAAAAIAAAACAAAAAgAAAAgAAAP8AAAD/gAAA/4AAAACAAAAAgAAAAQAAAACAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAAAIAAAP+AAAD/gAAA/4AAAP+AAAD/gAAA/4AAAP+AAAAAAgAAAQADAAOAAAMABwAAAQEBAQEBAQEAAAAAAwAAAP0AAAADAAAAAQAAgAAA/4ACAACAAAD/gAABAIAAgAOABAAAGwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQCAAAAAgAAAAIAAAACAAAD/gAAA/4AAAP+AAAABgAAAAIAAAACAAAAAgAAA/4AAAP+AAAD/gAAAAIAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAA/4AAAP+AAAD/gAAA/4AAAP+AAAD/gAAA/4AAAAACAAAAAAOABAAAAwAXAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBgAAAAQAAAP8AAAAAgAAAAIAAAP6AAAD/AAAAAIAAAAKAAAAAgAAA/4AAAP+AAAAAAAEAAAD/AAGAAQAAAACAAAAAgAAA/wAAAAEAAAAAgAAA/4AAAP8AAAD/gAAA/4AAAgAAAIADgAQAAAMAFQAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQKAAAD/gAAA/oAAAP+AAAAAgAAAAoAAAACAAAD/gAAA/oAAAAEAAAD+gAAAAQABgAAA/oD/gACAAAACgAAAAIAAAP+AAAD9gAAA/4AAAAKAAAAAgAAA/QAAAAACAAAAgAOABAAABwAXAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQECgAAA/4AAAP+AAAD/gAAA/wAAAACAAAAAgAAAAYAAAACAAAAAgAAA/wAAAP6AAAACAAEAAAAAgAAA/4AAAP8A/oACgAAAAIAAAACAAAD/gAAA/4AAAP2AAAABAAAA/wAAAwAAAIADgAQAAAMABwATAAABAQEBAQEBAQEBAQEBAQEBAQEBAQKAAAD+gAAAAYAAAP6AAAD/AAAAAwAAAACAAAD/gAAAAIAAAP+AAAABAAEAAAD/AAGAAQAAAP8A/gADgAAA/4AAAP8AAAD/gAAA/wAAAP+AAAAAAQAAAIADgAQAABsAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAAAA/4AAAP+AAAAAgAAAAIAAAAIAAAAAgAAA/wAAAP8AAAD/gAAAAIAAAAEAAAABAAAA/4AAAACAAIAAAACAAAABgAAAAIAAAACAAAD/gAAA/4AAAACAAAD/gAAA/oAAAP+AAAAAgAAA/4AAAP+AAAAAAgAAAIADgAQAAAcAEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQECAAAAAIAAAP+AAAD/AAAA/wAAAAKAAAAAgAAAAIAAAP+AAAD/gAAAAQAAgAAAAYAAAACAAAD9gP+AA4AAAP+AAAD/gAAA/oAAAP+AAAD/gAABAAAAgAOABAAACwAAAQEBAQEBAQEBAQEBAAAAAAOAAAD9gAAAAgAAAP4AAAACgAAAAIADgAAA/4AAAP8AAAD/gAAA/wAAAP+AAAAAAQAAAIADgAQAAAkAAAEBAQEBAQEBAQEAAAAAA4AAAP2AAAACAAAA/gAAAACAA4AAAP+AAAD/AAAA/4AAAP6AAAEAAACAA4AEAAAXAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAAAA/4AAAP+AAAAAgAAAAIAAAAKAAAD+AAAA/4AAAACAAAABAAAA/4AAAAGAAAAAgACAAAAAgAAAAYAAAACAAAAAgAAA/4AAAP+AAAD+gAAA/4AAAAEAAAAAgAAA/gAAAAABAAAAgAOABAAACwAAAQEBAQEBAQEBAQEBAAAAAAEAAAABgAAAAQAAAP8AAAD+gAAAAIADgAAA/oAAAAGAAAD8gAAAAYAAAP6AAAAAAQCAAIADgAQAAAsAAAEBAQEBAQEBAQEBAQCAAAABAAAA/wAAAAMAAAD/AAAAAQAAAACAAIAAAAKAAAAAgAAA/4AAAP2AAAD/gAAAAAEAAACAA4AEAAANAAABAQEBAQEBAQEBAQEBAQCAAAD/gAAAAQAAAAGAAAD/AAAAAgAAAP+AAAAAgACAAAABAAAA/wAAAAKAAAAAgAAA/QAAAP+AAAEAAACAA4AEAAAdAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAAAQAAAACAAAAAgAAAAIAAAAEAAAD/gAAA/4AAAP+AAAAAgAAAAIAAAACAAAD+gAAA/4AAAP+AAAAAgAOAAAD+gAAAAIAAAACAAAAAgAAA/4AAAP+AAAD/gAAA/4AAAP+AAAD/gAAA/4AAAACAAAAAgAAA/wAAAQAAAIADgAQAAAUAAAEBAQEBAQAAAAABAAAAAoAAAACAA4AAAP0AAAD/gAABAAAAgAOABAAAEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAAAQAAAACAAAAAgAAAAIAAAAEAAAD/AAAA/4AAAP+AAAD/gAAAAIADgAAA/4AAAP+AAAAAgAAAAIAAAPyAAAABgAAA/4AAAACAAAD+gAAAAAEAAACAA4AEAAATAAABAQEBAQEBAQEBAQEBAQEBAQEBAQAAAAABAAAAAIAAAACAAAAAgAAAAQAAAP8AAAD/gAAA/4AAAP+AAAAAgAOAAAD/gAAA/4AAAP+AAAABgAAA/IAAAACAAAAAgAAAAIAAAP6AAAAAAgAAAIADgAQAAAMADwAAAQEBAQEBAQEBAQEBAQEBAQKAAAD+gAAA/4AAAP+AAAAAgAAAAoAAAACAAAD/gAAAAQACgAAA/YD/gACAAAACgAAAAIAAAP+AAAD9gAAA/4AAAgAAAIADgAQAAAMADQAAAQEBAQEBAQEBAQEBAQECgAAA/oAAAP8AAAADAAAAAIAAAP+AAAD+AAAAAgABgAAA/oD+gAOAAAD/gAAA/oAAAP+AAAD/AAAAAAMAAACAA4AEAAADAAsAGQAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEDAAAAAIAAAP6AAAD/gAAAAQAAAP6AAAD/gAAA/4AAAACAAAACgAAAAIAAAP+AAAD/gAAAAIAAgAAA/4AAgACAAAAAgAAAAYAAAP2A/4AAgAAAAoAAAACAAAD/gAAA/gAAAP+AAAD/gAACAAAAgAOABAAABQAXAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQECAAAAAIAAAP6AAAD/AAAAAwAAAACAAAD/AAAAAIAAAACAAAD+gAAA/4AAAP+AAAACAACAAAABAAAA/oD+gAOAAAD/gAAA/oAAAP+AAAD/gAAA/4AAAACAAAAAgAAA/wAAAQAAAIADgAQAABsAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAgAAA/4AAAAEAAAABgAAA/gAAAP+AAAAAgAAAAgAAAACAAAD/AAAA/wAAAAIAAAAAgAAA/4AAAACAAIAAAACAAAD/gAAAAQAAAACAAAABAAAAAIAAAP+AAAD/gAAAAIAAAP8AAAD/gAAA/wAAAP+AAAAAAQCAAIADgAQAAAcAAAEBAQEBAQEBAYAAAP8AAAADAAAA/wAAAACAAwAAAACAAAD/gAAA/QAAAAABAAAAgAOABAAACwAAAQEBAQEBAQEBAQEBAIAAAP+AAAABAAAAAYAAAAEAAAD/gAAAAIAAgAAAAwAAAP0AAAADAAAA/QAAAP+AAAAAAQAAAIADgAQAABcAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQGAAAD/gAAA/4AAAP+AAAABAAAAAIAAAACAAAAAgAAAAQAAAP+AAAD/gAAA/4AAAACAAIAAAACAAAAAgAAAAgAAAP6AAAD/gAAAAIAAAAGAAAD+AAAA/4AAAP+AAAD/gAAAAAEAAACAA4AEAAATAAABAQEBAQEBAQEBAQEBAQEBAQEBAQAAAAABAAAAAIAAAACAAAAAgAAAAQAAAP8AAAD/gAAA/4AAAP+AAAAAgAOAAAD+gAAAAIAAAP+AAAABgAAA/IAAAACAAAAAgAAA/4AAAP+AAAAAAQAAAIADgAQAACMAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQAAAAAAgAAAAIAAAP+AAAD/gAAAAQAAAACAAAAAgAAAAIAAAAEAAAD/gAAA/4AAAACAAAAAgAAA/wAAAP+AAAD/gAAA/4AAAACAAQAAAACAAAAAgAAAAIAAAAEAAAD/gAAA/4AAAACAAAAAgAAA/wAAAP+AAAD/gAAA/4AAAP8AAAAAgAAAAIAAAP+AAAD/gAAAAAEAgACAA4AEAAAPAAABAQEBAQEBAQEBAQEBAQEBAYAAAP+AAAD/gAAAAQAAAAEAAAABAAAA/4AAAP+AAAAAgAGAAAAAgAAAAYAAAP6AAAABgAAA/oAAAP+AAAD+gAAAAAEAAACAA4AEAAAXAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAAAIAAAACAAAAAgAAAAIAAAP4AAAADgAAA/4AAAP+AAAD/gAAA/4AAAAIAAAAAgAEAAAAAgAAAAIAAAACAAAAAgAAAAIAAAP8AAAD/gAAA/4AAAP+AAAD/gAAA/4AAAAABAQAAgAKABAAABwAAAQEBAQEBAQEBAAAAAYAAAP+AAAAAgAAAAIADgAAA/4AAAP2AAAD/gAAAAAcAAACAA4AEAAADAAcACwAPABMAFwAbAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAwAAAACAAAD/AAAAAIAAAP8AAAAAgAAA/wAAAACAAAD/AAAAAIAAAP8AAAAAgAAA/wAAAACAAAAAgACAAAD/gACAAIAAAP+AAIAAgAAA/4AAgACAAAD/gACAAIAAAP+AAIAAgAAA/4AAgACAAAD/gAAAAAEBAACAAoAEAAAHAAABAQEBAQEBAQEAAAAAgAAA/4AAAAGAAAAAgACAAAACgAAAAIAAAPyAAAAAAQAAAgADgAQAABcAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQAAAAAAgAAAAIAAAACAAAAAgAAAAIAAAACAAAAAgAAA/wAAAP+AAAD/gAAA/4AAAAIAAIAAAACAAAAAgAAAAIAAAP+AAAD/gAAA/4AAAP+AAAAAgAAAAIAAAP+AAAD/gAAAAAEAAACAA4ABAAADAAABAQEBAAAAAAOAAAAAgACAAAD/gAAAAAIAgAKAAgAEAAADAAkAAAEBAQEBAQEBAQEBgAAAAIAAAP8AAAD/gAAAAQAAAAKAAIAAAP+AAIAAgAAAAIAAAP8AAAAAAgAAAIADgAOAAAcAFwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAoAAAP+AAAD/gAAA/4AAAP8AAAAAgAAAAIAAAAGAAAAAgAAAAIAAAP8AAAD+gAAAAYABAAAAAIAAAP+AAAD/AP8AAgAAAACAAAAAgAAA/4AAAP+AAAD+AAAAAIAAAP+AAAMAAACAA4ADgAADAAcAEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQECgAAA/oAAAAGAAAD+gAAA/wAAAAMAAAAAgAAA/4AAAACAAAD/gAAAAQABAAAA/wABgACAAAD/gP4AAwAAAP+AAAD/gAAA/4AAAP8AAAD/gAAAAAEAAACAA4ADgAATAAABAQEBAQEBAQEBAQEBAQEBAQEBAQCAAAD/gAAAAIAAAAKAAAAAgAAA/wAAAP6AAAABgAAAAQAAAP+AAAAAgACAAAACAAAAAIAAAP+AAAD/gAAAAIAAAP4AAAAAgAAA/4AAAP+AAAAAAgAAAIADgAOAAAMACwAAAQEBAQEBAQEBAQEBAoAAAP6AAAD/AAAAAwAAAACAAAD/gAAAAQACAAAA/gD/gAMAAAD/gAAA/gAAAP+AAAEAAACAA4ADgAALAAABAQEBAQEBAQEBAQEAAAAAA4AAAP2AAAACAAAA/gAAAAKAAAAAgAMAAAD/gAAA/4AAAP+AAAD/AAAA/4AAAAABAAAAgAOAA4AACQAAAQEBAQEBAQEBAQAAAAADgAAA/YAAAAIAAAD+AAAAAIADAAAA/4AAAP8AAAD/gAAA/wAAAQAAAIADgAOAAA8AAAEBAQEBAQEBAQEBAQEBAQEAgAAA/4AAAACAAAACgAAA/gAAAAGAAAD/AAAAAgAAAACAAIAAAAIAAAAAgAAA/4AAAP4AAAAAgAAAAIAAAP6AAAAAAQAAAIADgAOAAAsAAAEBAQEBAQEBAQEBAQAAAAABAAAAAYAAAAEAAAD/AAAA/oAAAACAAwAAAP8AAAABAAAA/QAAAAGAAAD+gAAAAAEBAACAAwADgAALAAABAQEBAQEBAQEBAQEBAAAAAIAAAP+AAAACAAAA/4AAAACAAAAAgACAAAACAAAAAIAAAP+AAAD+AAAA/4AAAAABAAAAgAOAA4AADwAAAQEBAQEBAQEBAQEBAQEBAQCAAAD/gAAAAQAAAAEAAAD/gAAAAgAAAP+AAAD/gAAAAIAAgAAAAIAAAP+AAAACAAAAAIAAAP+AAAD+AAAA/4AAAAACAAAAgAOAA4AABQAXAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQECAAAAAIAAAAEAAAD8gAAAAQAAAACAAAAAgAAAAYAAAP8AAAD/gAAA/4AAAP+AAAAAgAEAAAD/gAAA/4AAAAMAAAD/AAAAAIAAAACAAAD/gAAA/4AAAP8AAAAAgAAA/oAAAQAAAIADgAOAAAUAAAEBAQEBAQAAAAABAAAAAoAAAACAAwAAAP2AAAD/gAABAAAAgAOAA4AAEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAAAQAAAACAAAAAgAAAAIAAAAEAAAD/AAAA/4AAAP+AAAD/gAAAAIADAAAA/4AAAP+AAAAAgAAAAIAAAP0AAAABgAAA/4AAAACAAAD+gAAAAAEAAACAA4ADgAATAAABAQEBAQEBAQEBAQEBAQEBAQEBAQAAAAABAAAAAIAAAACAAAAAgAAAAQAAAP8AAAD/gAAA/4AAAP+AAAAAgAMAAAD/gAAA/4AAAP+AAAABgAAA/QAAAACAAAAAgAAAAIAAAP6AAAAAAgAAAIADgAOAAAMADwAAAQEBAQEBAQEBAQEBAQEBAQKAAAD+gAAA/4AAAP+AAAAAgAAAAoAAAACAAAD/gAAAAQACAAAA/gD/gACAAAACAAAAAIAAAP+AAAD+AAAA/4AAAgAAAIADgAOAAAMADQAAAQEBAQEBAQEBAQEBAQECgAAA/oAAAP8AAAADAAAAAIAAAP+AAAD+AAAAAYABgAAA/oD/AAMAAAD/gAAA/oAAAP+AAAD/gAAAAAMAAACAA4ADgAADAAkAFwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAYAAAACAAAAAAAAAAIAAAP6AAAD/gAAA/4AAAACAAAACgAAAAIAAAP+AAAAAgAAAAYAAgAAA/4D/gACAAAABgAAA/gD/gACAAAACAAAAAIAAAP+AAAD+gAAA/4AAAP+AAAAAAgAAAIADgAOAAAMAEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQECgAAA/oAAAP8AAAADAAAAAIAAAP+AAAAAgAAA/wAAAP+AAAD/AAAAAgABAAAA/wD+gAMAAAD/gAAA/wAAAP8AAAD/gAAAAIAAAACAAAD/AAABAAAAgAOAA4AAEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAAAoAAAP4AAAD/gAAAAIAAAAKAAAD+AAAAAgAAAACAAAD/gAAAAIAAgAAAAQAAAACAAAAAgAAAAIAAAP+AAAD/gAAA/4AAAP8AAAD/gAAAAAEAgACAA4ADgAAHAAABAQEBAQEBAQGAAAD/AAAAAwAAAP8AAAAAgAKAAAAAgAAA/4AAAP2AAAAAAQAAAIADgAOAAAsAAAEBAQEBAQEBAQEBAQCAAAD/gAAAAQAAAAGAAAABAAAA/4AAAACAAIAAAAKAAAD9gAAAAoAAAP2AAAD/gAAAAAEAAACAA4ADgAAXAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBgAAA/4AAAP+AAAD/gAAAAQAAAACAAAAAgAAAAIAAAAEAAAD/gAAA/4AAAP+AAAAAgACAAAAAgAAAAIAAAAGAAAD+gAAA/4AAAACAAAABgAAA/oAAAP+AAAD/gAAA/4AAAAABAAAAgAOAA4AAEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAAAQAAAACAAAAAgAAAAIAAAAEAAAD/AAAA/4AAAP+AAAD/gAAAAIADAAAA/oAAAACAAAD/gAAAAYAAAP0AAAAAgAAAAIAAAP+AAAD/gAAAAAEAAACAA4ADgAAjAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAAAIAAAACAAAD/gAAA/4AAAAEAAAAAgAAAAIAAAACAAAABAAAA/4AAAP+AAAAAgAAAAIAAAP8AAAD/gAAA/4AAAP+AAAAAgACAAAAAgAAAAQAAAACAAAAAgAAA/4AAAP+AAAAAgAAAAIAAAP+AAAD/gAAA/wAAAP+AAAD/gAAAAIAAAACAAAD/gAAA/4AAAAABAIAAgAOAA4AADwAAAQEBAQEBAQEBAQEBAQEBAQGAAAD/gAAA/4AAAAEAAAABAAAAAQAAAP+AAAD/gAAAAIABAAAAAIAAAAGAAAD+gAAAAYAAAP6AAAD/gAAA/wAAAAABAAAAgAOAA4AAEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEAAAAAAIAAAAEAAAABAAAA/YAAAAOAAAD/gAAA/wAAAP8AAAACgAAAAIABAAAAAIAAAACAAAAAgAAAAIAAAP8AAAD/gAAA/4AAAP+AAAD/gAAAAAEAgACAAoAEAAATAAABAQEBAQEBAQEBAQEBAQEBAQEBAQGAAAD/gAAA/4AAAACAAAAAgAAAAQAAAP+AAAD/gAAAAIAAAACAAAAAgACAAAABAAAAAIAAAAEAAAAAgAAA/4AAAP8AAAD/gAAA/wAAAP+AAAAAAQEAAIACAAQAAAMAAAEBAQEBAAAAAQAAAACAA4AAAPyAAAAAAQEAAIADAAQAABMAAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQAAAACAAAAAgAAA/4AAAP+AAAABAAAAAIAAAACAAAD/gAAA/4AAAACAAIAAAAEAAAAAgAAAAQAAAACAAAD/gAAA/wAAAP+AAAD/AAAA/4AAAAABAAABAAOAAwAAEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQECAAAA/4AAAP8AAAD/gAAAAIAAAAEAAAAAgAAAAQAAAACAAAD/gAAAAQAAgAAAAIAAAP+AAAABAAAAAIAAAP+AAAD/gAAAAIAAAP8AAAD/gAAAAAIBAAKAAgAEAAAFAAkAAAEBAQEBAQEBAQEBAAAAAIAAAACAAAD/gAAAAIAAAAKAAQAAAP+AAAD/gAEAAIAAAP+AAAAAAgGAAoACgAQAAAMACQAAAQEBAQEBAQEBAQGAAAAAgAAAAAAAAP+AAAABAAAAAoAAgAAA/4AAgACAAAAAgAAA/wAAAAAEAIACgAMABAAABQALAA8AEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEAgAAAAIAAAACAAAAAgAAAAIAAAACAAAD+AAAAAIAAAAEAAAAAgAAAAoABAAAA/4AAAP+AAAABAAAA/4AAAP+AAQAAgAAA/4AAAACAAAD/gAAEAIACgAMABAAAAwAHAA0AEwAAAQEBAQEBAQEBAQEBAQEBAQEBAQEAgAAAAIAAAAEAAAAAgAAA/oAAAP+AAAABAAAAAQAAAP+AAAABAAAAAoAAgAAA/4AAAACAAAD/gACAAIAAAACAAAD/AAAAAIAAAACAAAD/AAAAADACRgAAAAAAAAAAACgAAAAAAAAAAAABABIAKAAAAAAAAAACAA4AOgAAAAAAAAADABIASAAAAAAAAAAEACIAWgAAAAAAAAAFABYAfAAAAAAAAAAGABAAkgAAAAAAAAAHAFYAogAAAAAAAAAIACwA+AAAAAAAAAAJAAoBJAAAAAAAAAAKAEwBLgAAAAAAAAALAHgBegAAAAAAAAAMAG4B8gAAAAAAAAANACQCYAAAAAAAAAATAFIChAAAAAAAAAEAABgC1gABAAAAAAAAABQC7gABAAAAAAABAAkDAgABAAAAAAACAAcDCwABAAAAAAADAAkDEgABAAAAAAAEABEDGwABAAAAAAAFAAsDLAABAAAAAAAGAAgDNwABAAAAAAAHACsDPwABAAAAAAAIABYDagABAAAAAAAJAAUDgAABAAAAAAAKACUDhQABAAAAAAALADwDqgABAAAAAAAMADcD5gABAAAAAAANABIEHQABAAAAAAATACkELwABAAAAAAEAAAwEWAADAAEECQAAACgEZAADAAEECQABABIEjAADAAEECQACAA4EngADAAEECQADABIErAADAAEECQAEACIEvgADAAEECQAFABYE4AADAAEECQAGABAE9gADAAEECQAHAFYFBgADAAEECQAIACwFXAADAAEECQAJAAoFiAADAAEECQAKAEwFkgADAAEECQALAHgF3gADAAEECQAMAG4GVgADAAEECQANACQGxAADAAEECQATAFIG6AADAAEECQEAABgHOgBDAG8AcAB5AHIAaQBnAGgAdAAgAFIAdQBpAGwAeAAgADIAMAAxADUATgBFAFMAIABQAGkAeABlAGwAUgBlAGcAdQBsAGEAcgBOAEUAUwAgAFAAaQB4AGUAbABOAEUAUwAgAFAAaQB4AGUAbAAgAFIAZQBnAHUAbABhAHIAVgBlAHIAcwBpAG8AbgAgADEALgAwAE4ARQBTAFAAaQB4AGUAbABGAG8AbgB0AFMAdAByAHUAYwB0ACAAaQBzACAAYQAgAHQAcgBhAGQAZQBtAGEAcgBrACAAbwBmACAARgBvAG4AdABTAHQAcgB1AGMAdAAuAGMAbwBtAGgAdAB0AHAAcwA6AC8ALwBmAG8AbgB0AHMAdAByAHUAYwB0AC4AYwBvAG0AUgB1AGkAbAB4IBwATgBFAFMAIABQAGkAeABlAGwgHQAgAHcAYQBzACAAYgB1AGkAbAB0ACAAdwBpAHQAaAAgAEYAbwBuAHQAUwB0AHIAdQBjAHQACgBoAHQAdABwAHMAOgAvAC8AZgBvAG4AdABzAHQAcgB1AGMAdAAuAGMAbwBtAC8AZgBvAG4AdABzAHQAcgB1AGMAdABpAG8AbgBzAC8AcwBoAG8AdwAvADEAMQA5ADgANAA0ADUALwBuAGUAcwBfAHAAaQB4AGUAbABoAHQAdABwAHMAOgAvAC8AZgBvAG4AdABzAHQAcgB1AGMAdAAuAGMAbwBtAC8AZgBvAG4AdABzAHQAcgB1AGMAdABvAHIAcwAvAHMAaABvAHcALwAxADEAOQA3ADcAMAA0AC8AcgB1AGkAbAB4AEYAbwBuAHQAUwB0AHIAdQBjAHQAIABMAGkAYwBlAG4AcwBlAEYAaQB2AGUAIABiAGkAZwAgAHEAdQBhAGMAawBpAG4AZwAgAHoAZQBwAGgAeQByAHMAIABqAG8AbAB0ACAAbQB5ACAAdwBhAHgAIABiAGUAZABBAHcAZwBCAGYAVgAxAGcAVwB3AD0APUNvcHlyaWdodCBSdWlseCAyMDE1TkVTIFBpeGVsUmVndWxhck5FUyBQaXhlbE5FUyBQaXhlbCBSZWd1bGFyVmVyc2lvbiAxLjBORVNQaXhlbEZvbnRTdHJ1Y3QgaXMgYSB0cmFkZW1hcmsgb2YgRm9udFN0cnVjdC5jb21odHRwczovL2ZvbnRzdHJ1Y3QuY29tUnVpbHjSTkVTIFBpeGVs0yB3YXMgYnVpbHQgd2l0aCBGb250U3RydWN0aHR0cHM6Ly9mb250c3RydWN0LmNvbS9mb250c3RydWN0aW9ucy9zaG93LzExOTg0NDUvbmVzX3BpeGVsaHR0cHM6Ly9mb250c3RydWN0LmNvbS9mb250c3RydWN0b3JzL3Nob3cvMTE5NzcwNC9ydWlseEZvbnRTdHJ1Y3QgTGljZW5zZUZpdmUgYmlnIHF1YWNraW5nIHplcGh5cnMgam9sdCBteSB3YXggYmVkQXdnQmZWMWdXdz09AEMAbwBwAHkAcgBpAGcAaAB0ACAAUgB1AGkAbAB4ACAAMgAwADEANQBOAEUAUwAgAFAAaQB4AGUAbABSAGUAZwB1AGwAYQByAE4ARQBTACAAUABpAHgAZQBsAE4ARQBTACAAUABpAHgAZQBsACAAUgBlAGcAdQBsAGEAcgBWAGUAcgBzAGkAbwBuACAAMQAuADAATgBFAFMAUABpAHgAZQBsAEYAbwBuAHQAUwB0AHIAdQBjAHQAIABpAHMAIABhACAAdAByAGEAZABlAG0AYQByAGsAIABvAGYAIABGAG8AbgB0AFMAdAByAHUAYwB0AC4AYwBvAG0AaAB0AHQAcABzADoALwAvAGYAbwBuAHQAcwB0AHIAdQBjAHQALgBjAG8AbQBSAHUAaQBsAHggHABOAEUAUwAgAFAAaQB4AGUAbCAdACAAdwBhAHMAIABiAHUAaQBsAHQAIAB3AGkAdABoACAARgBvAG4AdABTAHQAcgB1AGMAdAAKAGgAdAB0AHAAcwA6AC8ALwBmAG8AbgB0AHMAdAByAHUAYwB0AC4AYwBvAG0ALwBmAG8AbgB0AHMAdAByAHUAYwB0AGkAbwBuAHMALwBzAGgAbwB3AC8AMQAxADkAOAA0ADQANQAvAG4AZQBzAF8AcABpAHgAZQBsAGgAdAB0AHAAcwA6AC8ALwBmAG8AbgB0AHMAdAByAHUAYwB0AC4AYwBvAG0ALwBmAG8AbgB0AHMAdAByAHUAYwB0AG8AcgBzAC8AcwBoAG8AdwAvADEAMQA5ADcANwAwADQALwByAHUAaQBsAHgARgBvAG4AdABTAHQAcgB1AGMAdAAgAEwAaQBjAGUAbgBzAGUARgBpAHYAZQAgAGIAaQBnACAAcQB1AGEAYwBrAGkAbgBnACAAegBlAHAAaAB5AHIAcwAgAGoAbwBsAHQAIABtAHkAIAB3AGEAeAAgAGIAZQBkAEEAdwBnAEIAZgBWADEAZwBXAHcAPQA9AAMAAAAAAAAAZgAzAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAA==) format('truetype');
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'rajdhani';
+  src: url('./font.ttf') format('truetype');
+  font-display: block;
+}
+
+:root {
+  --stage-lo: #16110d;
+  --stage-hi: #241a12;
+  --paper: #f2e8d8;
+  --paper-dim: #b8ac98;
+  --ink: #2a1f16;
+  --ink-soft: rgba(20, 14, 9, 0.62);
+  --red: #e0523a;
+  --blue: #3f7cc4;
+  --green: #45a85e;
+  --yellow: #ddc531;
+  --amber: #e8a33d;
+  --ghost: #8a7f72;
+  --hudscale: 1;
+  /* chrome measures derive off the CONTAINER via --hudscale, not the viewport */
+  --u: calc(1px * var(--hudscale));
+  --pixfont: 'rajdhani', 'Segoe UI', system-ui, sans-serif;
+  --finefont: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* The letterbox around the composition — warm near-black, NEVER pure #000.
+     The Observatory embed hands us an arbitrary box; the fixed-aspect stage is
+     centered inside it and this warm tone fills whatever is left over. */
+  background: #120d09;
+  color: var(--paper);
+  font-family: var(--finefont);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The embed box. The stage is ONE fixed-aspect composition centered inside it;
+   board + every overlay live in the stage and scale together as a single unit
+   (§2/L82: chrome sizes off the CONTAINER, not the viewport), so overlays never
+   drift from the graphics at any embed size. */
+#viewport {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#stage {
+  position: relative;
+  /* width/height are set in px by relayout() to the board's native aspect
+     (1235:659) fitted into #viewport; the canvas fills it exactly (matching
+     aspect → no internal letterbox) and all chrome is pinned in this space. */
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(120% 90% at 50% 38%, var(--stage-hi) 0%, var(--stage-lo) 72%);
+  overflow: hidden;
+}
+
+/* The board fills the frame ABOVE the reserved transport band; broadcast_core
+   letterboxes it to native aspect. --band is the bottom strip (set by relayout)
+   where the transport lives, so no chrome ever sits over play. */
+#board {
+  position: absolute;
+  left: 0;
+  /* canvas is a replaced element: `inset` won't stretch it, so size explicitly.
+     The board sits BETWEEN the reserved scorebug band (top) and transport band
+     (bottom), so no chrome ever overlaps play. */
+  top: var(--topband, 0px);
+  width: 100%;
+  height: calc(100% - var(--topband, 0px) - var(--band, 0px));
+  display: block;
+  image-rendering: pixelated;
+  /* One-finger drags belong to the PAGE while the board is fitted; syncTouchAction
+     takes them back (touch-action: none) once there is somewhere to pan. Neither
+     value permits pinch-zoom, so the second finger always reaches our handler
+     instead of zooming the document. */
+  touch-action: pan-x pan-y;
+}
+
+/* A soft light pool focuses the eye on the arena (not a literal set). Matches
+   the board area so it never darkens the reserved transport band below. */
+#lightpool {
+  position: absolute;
+  inset: var(--topband, 0px) 0 var(--band, 0px) 0;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 58% at 50% 46%, transparent 40%, rgba(12, 8, 5, 0.34) 100%);
+  z-index: 2;
+}
+
+/* CRT phosphor grain drift — ambient, paused under prefers-reduced-motion. */
+#grain {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  opacity: 0.05;
+  z-index: 3;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.5) 0 1px, transparent 1px 3px);
+  animation: graindrift 7s steps(4) infinite;
+}
+@keyframes graindrift { to { transform: translateY(3px); } }
+
+#chrome {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  font-family: var(--pixfont);
+}
+#chrome > * { pointer-events: auto; }
+
+/* Team color utility: any chrome element carrying a team-name class exposes
+   that team's tint as --tc, and every team-colored rule below reads
+   var(--tc, <neutral fallback>). Supporting a new team = one line here plus
+   its art — no per-team selector pairs anywhere else. */
+.red { --tc: var(--red); }
+.blue { --tc: var(--blue); }
+.green { --tc: var(--green); }
+.yellow { --tc: var(--yellow); }
+
+/* ---------- 1. TOP-BAND SCOREBUG ---------- */
+#scorebug {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  display: grid;
+  /* minmax(0,1fr), NOT 1fr: a bare 1fr track floors at its content's min-content
+     width, so a long team name would blow the side track out and shove the center
+     clock off-center. minmax(0,…) lets each side shrink to 0 and clip via the
+     name's own ellipsis at the TRUE track edge — the name then uses all the plate
+     room there actually is, instead of an arbitrary hard cap. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  /* Shrink the whole scorebug group (names, lives numerals, labels, squad pips,
+     clock) 20% by scaling the local unit — every measure below derives from --u,
+     so one override rescales the band without touching per-element sizes. */
+  --u: calc(1px * var(--hudscale) * 0.8);
+  gap: calc(6 * var(--u));
+  padding: calc(6 * var(--u)) calc(12 * var(--u)) calc(7 * var(--u));
+  /* Dedicated top band: a solid warm-dark strip that lives ABOVE the board (its
+     measured height = --topband, reserved by relayout), so the scorebug never
+     covers play — grenades/players at the top rows stay fully visible. Mirrors
+     the bottom transport band. */
+  box-sizing: border-box;
+  background: var(--stage-lo);
+  box-shadow: inset 0 calc(-1 * var(--u)) 0 rgba(242, 232, 216, 0.06);
+}
+
+/* One side of the scorebug: one plate per side for classic red/blue (exactly
+   the old layout); a 3-4 team game puts BOTH of a side's plates on the same
+   row (outer team at the screen edge, inner team beside the clock), so all
+   four teams read on one line across the band. */
+.plates {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(5 * var(--u));
+  min-width: 0;
+}
+.plates.row { flex-direction: row; align-items: center; gap: calc(18 * var(--u)); }
+.plates.row .plate { flex: 1 1 0; }
+.plate {
+  display: flex;
+  align-items: center;
+  gap: calc(9 * var(--u));
+  min-width: 0;
+}
+/* Orientation is a SIDE property, not a color property: right-side plates
+   mirror so both team names stay innermost, flanking the clock. */
+.plate.side-r { flex-direction: row-reverse; text-align: right; }
+
+.plate .team-id { min-width: 0; }
+.plate .team-name {
+  font-family: var(--pixfont);
+  font-size: calc(16 * var(--u));
+  letter-spacing: 0.5px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Inline with Lives + count on ONE row. Let the name shrink and ellipsis so a
+     long policy name never pushes the label/count off the plate; the label and
+     numeral hold their size. Full name still reads in the CARRYING line + roster.
+     No max-width: the minmax(0,1fr) side track already bounds it, so the name
+     grows to the full plate width and only ellipsizes when it genuinely runs out
+     of room — not at an arbitrary early cap. */
+  flex: 0 1 auto;
+  min-width: 0;
+  text-shadow: 0 calc(2 * var(--u)) 0 var(--ink);
+}
+.plate .team-name { color: var(--tc, var(--paper)); }
+
+/* One baseline row with the TEAM NAME innermost (toward the center clock):
+   a left plate reads "32 LIVES RED", a right plate reads "BLUE LIVES 32", so
+   names flank the clock. Left reverses; right keeps DOM order (name → label → num). */
+.plate .lives-line {
+  display: flex;
+  align-items: baseline;
+  gap: calc(6 * var(--u));
+}
+.plate.side-l .lives-line { flex-direction: row-reverse; }
+.lives-num {
+  font-family: var(--pixfont);
+  font-size: calc(20 * var(--u));
+  line-height: 1;
+  color: var(--paper);
+  flex: none;
+}
+.lives-label {
+  font-family: var(--finefont);
+  font-size: calc(8 * var(--u));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  flex: none;
+}
+/* Team-perk badges, riding the squad-pip strip (the pip strip IS the life
+   meter — see renderSquad). Each policy's pips form one .squad-pol block
+   with that policy's badges beside them; the center-adjacent pips with
+   badges flanking OUTSIDE come from renderSquad's fixed DOM order
+   (group 0: icons,pips; group 1: pips,icons), never from side-reversal CSS
+   — see the .squad-pol comment below for why mirroring was removed. Badges
+   keep each perk's own fixed color (never team-tinted). */
+.plate .perk-icos {
+  display: flex;
+  align-items: center;
+  gap: calc(3 * var(--u));
+}
+.plate .perk-ico { display: inline-flex; }
+.plate .perk-ico svg {
+  width: calc(10 * var(--u));
+  height: calc(10 * var(--u));
+  display: block;
+}
+/* Handicap chip: an amber pill next to the team name when that team is
+   weakened. The full delta breakdown rides in the native `title` on hover
+   (cursor:help hints it). Hidden entirely for an unhandicapped team. */
+.plate .hcap {
+  font-family: var(--finefont);
+  font-size: calc(8 * var(--u));
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--amber);
+  border-radius: calc(3 * var(--u));
+  padding: calc(2 * var(--u)) calc(4 * var(--u));
+  flex: none;
+  cursor: help;
+  white-space: nowrap;
+}
+/* Squad strip: ONE pip per player (8). Each pip is a tiny pie: the filled
+   wedge is that seat's remaining lives (full square = all lives, a sliver =
+   last life), dim = down-but-respawning, hollow = eliminated. The strip is
+   the "who's left" read; the big numeral is the exact lives count. Each pip
+   is clickable → POV lens (fog-honesty). */
+.squad {
+  display: flex;
+  gap: calc(6 * var(--u));
+  margin-top: calc(3 * var(--u));
+}
+.plate.side-r .squad { justify-content: flex-end; }
+/* Policy groups keep the HEADLINE's left-to-right order on BOTH plates — the
+   first-named policy's pips are always the left group, so a badge reads as
+   belonging to the name it sits under. (No side mirroring: an early version
+   reversed the strip on side-l for clock-symmetry, which visually attached
+   the left badges to the wrong policy name.) */
+.squad-pol {
+  display: flex;
+  align-items: center;
+  gap: calc(3 * var(--u));
+}
+.squad-pip {
+  width: calc(9 * var(--u));
+  height: calc(9 * var(--u));
+  /* --fill (0..1) = lives left / max lives; wedge sweeps clockwise from 12 */
+  background: conic-gradient(currentColor calc(var(--fill, 1) * 1turn), transparent 0);
+  opacity: 0.92;
+  cursor: pointer;
+  position: relative;
+  transition: opacity 140ms, transform 140ms;
+}
+/* faint frame so a part-filled pie still reads as one square slot */
+.squad-pip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 calc(1 * var(--u)) currentColor;
+  opacity: 0.35;
+}
+.squad-pip:hover { transform: translateY(calc(-1 * var(--u))); }
+.squad-pip.down { opacity: 0.3; }                              /* dead, lives left */
+.squad-pip.out {                                              /* eliminated */
+  background: transparent;
+  box-shadow: inset 0 0 0 calc(1.5 * var(--u)) currentColor;
+  opacity: 0.28;
+}
+.squad-pip.out::after { display: none; }       /* .out draws its own outline */
+.squad-pip.carry {                                            /* has the flag */
+  background: conic-gradient(var(--amber) calc(var(--fill, 1) * 1turn), transparent 0);
+  box-shadow: 0 0 calc(7 * var(--u)) var(--amber);
+}
+.squad-pip.pov {                                             /* POV lens active */
+  box-shadow: 0 0 0 calc(1.5 * var(--u)) var(--paper);
+}
+.plate .squad { color: var(--tc, var(--paper)); }
+
+/* flag-state icon — HOME (on pedestal) / TAKEN (riding a carrier) /
+   CAPTURED (GV32: retired, team eliminated — drawn like TAKEN). F2. */
+.flagicon {
+  position: relative;
+  width: calc(26 * var(--u));
+  height: calc(30 * var(--u));
+  flex: none;
+}
+.flagicon svg { width: 100%; height: 100%; display: block; }
+/* transform-box:fill-box so SVG transforms pivot about the cloth's own box,
+   not the viewBox edge (else the flip mirrors off-screen — invisible-at-vote). */
+.flagicon .cloth { transition: transform 90ms steps(3); transform-box: fill-box; transform-origin: left center; }
+.flagicon.taken .cloth { transform: scaleX(0.62) skewX(-8deg); }
+.flagicon.flip { animation: flagflip 260ms steps(3); transform-box: fill-box; transform-origin: center; }
+@keyframes flagflip { 0% { transform: scaleY(0.2); } 100% { transform: scaleY(1); } }
+.flagicon .carrier-tag {
+  position: absolute;
+  bottom: calc(-11 * var(--u));
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--finefont);
+  font-size: calc(7 * var(--u));
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: var(--amber);
+  text-transform: uppercase;
+  /* An outermost flag icon sits at the screen edge; an unclamped centered
+     tag would poke past it (seen as stray clipped names at the band edges
+     in 4-team games). */
+  max-width: calc(58 * var(--u));
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* center clock pill + phase */
+.clock {
+  position: relative; /* anchors the fast-forward mini indicator */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: calc(3 * var(--u));
+  padding-top: calc(1 * var(--u));
+}
+/* Tiny amber ▸▸ riding the right of the match clock while skip-lulls is
+   actually fast-forwarding — the at-a-glance "time is compressed" cue. */
+.ffwd-mini {
+  display: none;
+  position: absolute;
+  left: calc(100% + 5 * var(--u));
+  top: calc(6 * var(--u));
+  font-family: var(--pixfont);
+  font-size: calc(12 * var(--u));
+  color: var(--amber);
+  text-shadow: 0 calc(2 * var(--u)) 0 var(--ink);
+}
+.ffwd-mini.show { display: block; }
+.clock .time {
+  font-family: var(--pixfont);
+  /* The clock is the centerpiece: with the name folded into the lives row the
+     side plates are one row shorter, so grow the time numeral into that freed
+     vertical space and let it anchor the band. */
+  font-size: calc(30 * var(--u));
+  line-height: 1;
+  color: var(--paper);
+  text-shadow: 0 calc(2 * var(--u)) 0 var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.clock .caption {
+  font-family: var(--finefont);
+  font-size: calc(8.5 * var(--u));
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  white-space: nowrap;
+}
+.clock.tiebreak-warn .time { color: var(--amber); }
+
+/* Center column holds just the clock now — the capture-chase gauge was retired
+   in favor of the two bottom carry indicators. */
+.clock-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(4 * var(--u));
+}
+
+/* Clock pill soft tick — the third chrome ambient (§11). A near-imperceptible
+   breathe on the pill, so the countdown reads as a live instrument, not a label. */
+.clock.amb { animation: clocktick 2s ease-in-out infinite; }
+@keyframes clocktick { 0%,100% { opacity: 0.94; } 50% { opacity: 1; } }
+
+/* leader pulse when a team's lives lead is >=3 */
+.plate.leader .lives-num { animation: leaderpulse 1.9s ease-in-out infinite; }
+@keyframes leaderpulse { 0%,100% { text-shadow: none; } 50% { text-shadow: 0 0 calc(10 * var(--u)) var(--amber); } }
+
+/* Beat-pause (§11): idle systems freeze the instant a beat lands, so ambient
+   never competes with a kill/steal/capture for the eye. Applied on #stage; the
+   engine-driven board (24Hz) is untouched — only chrome ambient pauses. */
+#stage.beat-active .amb,
+#stage.beat-active .plate.leader .lives-num { animation-play-state: paused; }
+
+/* ---------- 3. BANNER LANE ---------- */
+#bannerlane {
+  position: absolute;
+  top: calc(78 * var(--u));
+  left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 12;
+  min-height: calc(26 * var(--u)); /* reserved slot: layout never jumps */
+}
+.banner-chip {
+  font-family: var(--pixfont);
+  font-size: calc(13 * var(--u));
+  letter-spacing: 0.06em;
+  padding: calc(6 * var(--u)) calc(14 * var(--u));
+  color: var(--paper);
+  background: var(--ink-soft);
+  border-bottom: calc(3 * var(--u)) solid var(--amber);
+  text-transform: uppercase;
+  white-space: nowrap;
+  animation: chippop 300ms cubic-bezier(.2,1.4,.4,1);
+}
+.banner-chip.steal { border-bottom-color: var(--amber); }
+.banner-chip.returned { border-bottom-color: var(--paper-dim); }
+.banner-chip.wipe { border-bottom-color: var(--tc, var(--red)); font-size: calc(15 * var(--u)); }
+/* the acting team's tint rides as a left accent bar (any team color) */
+.banner-chip.accent { box-shadow: inset calc(4 * var(--u)) 0 0 var(--tc, var(--amber)); }
+.banner-chip.leaving { animation: chipfade 260ms ease-in forwards; }
+@keyframes chippop { from { transform: translateY(calc(-8 * var(--u))) scale(0.9); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes chipfade { to { opacity: 0; transform: translateY(calc(-4 * var(--u))); } }
+
+/* ---------- 2. KILL FEED ---------- */
+#killfeed {
+  position: absolute;
+  /* Bottom-right, clear of the blue scorebug/roster (top) and the transport
+     bar (bottom). column-reverse so the newest row sits lowest, nearest the
+     transport, and older kills stack upward — a broadcast lower-third feed. */
+  bottom: calc(76 * var(--u));
+  right: calc(12 * var(--u));
+  display: flex;
+  flex-direction: column-reverse;
+  gap: calc(4 * var(--u));
+  align-items: flex-end;
+  width: calc(228 * var(--u));
+  min-height: calc(4 * 22 * var(--u)); /* fixed 4-row reserve */
+  z-index: 11;
+  /* Rows are display-only (no click handlers) — never let the feed intercept a
+     drag meant for the PiP or the board beneath it. */
+  pointer-events: none;
+}
+.feed-row {
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--u));
+  padding: calc(3 * var(--u)) calc(7 * var(--u));
+  background: var(--ink-soft);
+  font-family: var(--pixfont);
+  /* A touch smaller than the scorebug type so full 8-char names stay compact;
+     everything is in --u so the row scales with the board (responsive). */
+  font-size: calc(8 * var(--u));
+  line-height: 1;
+  /* Size to content so full names never truncate; rows are right-anchored
+     (align-items:flex-end on #killfeed) so a long row grows leftward — bounded
+     by the small font + the pre-bounded 10-char name, so it can't run away. */
+  max-width: none;
+  white-space: nowrap;
+  animation: feedin 250ms cubic-bezier(.2,1.3,.5,1);
+}
+.feed-row.leaving { animation: feedout 260ms ease-in forwards; }
+@keyframes feedin { from { transform: translateX(calc(30 * var(--u))); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes feedout { to { opacity: 0; transform: translateX(calc(14 * var(--u))); } }
+.feed-row .who { white-space: nowrap; }  /* names are pre-bounded to 10 chars by shortName(); show in full, never ellipsize */
+.feed-row .who { color: var(--tc, var(--paper)); }
+.feed-row .glyph { color: var(--paper); font-size: calc(9 * var(--u)); }
+.feed-row .badge {
+  font-family: var(--finefont);
+  font-size: calc(7 * var(--u));
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: calc(1 * var(--u)) calc(4 * var(--u));
+  color: var(--stage-lo);
+  background: var(--amber);
+}
+.feed-row .badge.tk { background: var(--red); color: var(--paper); }
+.feed-row.flagkill { box-shadow: inset 0 calc(-2 * var(--u)) 0 var(--amber); }
+.fpv-hp i.spent { background: rgba(242, 232, 216, 0.16); box-shadow: inset 0 0 0 1px rgba(242, 232, 216, 0.28); }
+.fpv-gear .carry { color: var(--amber); font-weight: 600; }
+
+/* ---------- 5. TRANSPORT ---------- */
+#transport {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  /* Sits in the reserved band BELOW the board — relayout() measures this strip's
+     natural height and reserves that much (--band) at the bottom of the frame, so
+     the scrubber and buttons never overlap play. A solid warm-dark strip, not a
+     fade — there is no arena underneath it to wash over. */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: calc(5 * var(--u));
+  padding: calc(8 * var(--u)) calc(12 * var(--u)) calc(8 * var(--u));
+  background: var(--stage-lo);
+  box-shadow: inset 0 calc(1 * var(--u)) 0 rgba(242, 232, 216, 0.06);
+}
+#transport.disabled { opacity: 0.35; pointer-events: none; }
+
+/* scrubber: click-to-seek track (top) over a full-timeline momentum graph.
+   The seek track and the momentum graph share the SAME 0→maxTicks x-axis, so
+   the playhead crosses the graph 1:1 with the timeline (no scrolling window). */
+.scrub {
+  position: relative;
+  height: calc(34 * var(--u));
+  cursor: pointer;
+}
+.scrub-track {
+  position: absolute;
+  left: 0; right: 0; top: calc(6 * var(--u));
+  height: calc(4 * var(--u));
+  background: rgba(242, 232, 216, 0.16);
+}
+.scrub-fill {
+  position: absolute;
+  left: 0; top: calc(6 * var(--u));
+  height: calc(4 * var(--u));
+  background: var(--paper);
+  width: 0;
+}
+.scrub-head {
+  /* spans track + graph so the playhead reads against the momentum curve */
+  position: absolute;
+  top: calc(2 * var(--u));
+  width: calc(3 * var(--u));
+  height: calc(30 * var(--u));
+  background: var(--amber);
+  transform: translateX(calc(-1.5 * var(--u)));
+  left: 0;
+  z-index: 3;
+}
+/* Full-timeline lives-lead graph, occupying the band UNDER the seek track. */
+.momentum {
+  position: absolute;
+  /* An inline <svg> is a REPLACED element: with width:auto it takes its
+     intrinsic viewBox ratio (1000×100 = 10:1) × height, NOT the left/right
+     box — so it renders ~10× its height wide (a short stub) instead of full
+     width. Pin width:100% so it spans the whole seek track, matching the
+     0→maxTicks x-axis the playhead rides. (preserveAspectRatio:none, so no
+     letterboxing when we override the ratio.) */
+  left: 0; width: 100%; top: calc(12 * var(--u));
+  height: calc(22 * var(--u));
+  display: block;
+  overflow: visible;
+}
+.momentum-label {
+  position: absolute;
+  left: 0; top: calc(13 * var(--u));
+  font-family: var(--finefont);
+  font-size: calc(6 * var(--u));
+  letter-spacing: 0.12em;
+  color: var(--paper-dim);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 2;
+}
+.beat-marker {
+  position: absolute;
+  top: 0;
+  width: calc(2 * var(--u));
+  height: calc(10 * var(--u));
+  transform: translateX(-1px);
+  z-index: 2;
+}
+/* kill ticks are short and colored by the KILLER's team (a red tick = red
+   scored a kill); team-kills and unattributable pileups stay neutral. */
+.beat-marker.kill { background: var(--tc, var(--paper-dim)); height: calc(6 * var(--u)); }
+/* flag beats are colored by the FLAG's team, matching the banners ("RED
+   HEART TAKEN"): steal = full tick with a flag head, return = same tick
+   dimmed (the heart snapped home), capture = the chunky match point in the
+   CAPTURING team's color. */
+.beat-marker.steal { background: var(--tc, var(--amber)); }
+.beat-marker.steal::after {
+  content: '';
+  position: absolute;
+  left: 0; top: 0;
+  width: calc(5 * var(--u));
+  height: calc(3 * var(--u));
+  background: inherit;
+}
+.beat-marker.return { background: var(--tc, var(--paper-dim)); opacity: 0.45; }
+.beat-marker.capture { background: var(--tc, var(--amber)); width: calc(3 * var(--u)); height: calc(12 * var(--u)); }
+/* winner cap: a flat block just past the track's right end, colored by the
+   verdict (split for a draw), so the scrubber itself says how this ends. */
+.scrub-win {
+  display: none;
+  position: absolute;
+  right: calc(-4 * var(--u));
+  top: calc(2 * var(--u));
+  width: calc(6 * var(--u));
+  height: calc(12 * var(--u));
+  z-index: 3;
+}
+.scrub-win.show { display: block; background: var(--tc, var(--paper-dim)); }
+/* verdict chip in the transport bar: "RED WINS" next to the tick clock. */
+.win-chip {
+  display: none;
+  font-family: var(--pixfont);
+  font-size: calc(9 * var(--u));
+  padding: 0 calc(6 * var(--u));
+  white-space: nowrap;
+}
+.win-chip.show { display: inline; }
+.win-chip.show { color: var(--tc, var(--paper-dim)); }
+
+.tbar {
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--u));
+  flex-wrap: wrap;
+}
+.tbtn {
+  font-family: var(--pixfont);
+  font-size: calc(11 * var(--u));
+  color: var(--paper);
+  background: rgba(242, 232, 216, 0.08);
+  border: none;
+  padding: calc(5 * var(--u)) calc(8 * var(--u));
+  min-width: calc(26 * var(--u));
+  cursor: pointer;
+  line-height: 1;
+}
+.tbtn:hover { background: rgba(242, 232, 216, 0.2); }
+.tbtn.on { color: var(--amber); box-shadow: inset 0 calc(-2 * var(--u)) 0 var(--amber); }
+.tbtn svg { width: calc(12 * var(--u)); height: calc(12 * var(--u)); display: block; fill: currentColor; }
+.tsep { flex: 1; }
+/* skip-lulls: dim shading over the quiet scrubber stretches, plus an amber
+   "skipping" chip in the tbar while the server is actually fast-forwarding. */
+.lull-span {
+  position: absolute;
+  top: calc(6 * var(--u));
+  height: calc(4 * var(--u));
+  background: rgba(18, 13, 9, 0.6);
+  pointer-events: none;
+}
+.ffwd-chip {
+  display: none;
+  font-family: var(--pixfont);
+  font-size: calc(9 * var(--u));
+  color: var(--amber);
+  padding: 0 calc(6 * var(--u));
+  white-space: nowrap;
+}
+.ffwd-chip.show { display: inline; }
+.speedchips { display: flex; gap: calc(2 * var(--u)); }
+.chip {
+  font-family: var(--pixfont);
+  font-size: calc(9 * var(--u));
+  color: var(--paper-dim);
+  background: rgba(242, 232, 216, 0.06);
+  border: none;
+  padding: calc(4 * var(--u)) calc(5 * var(--u));
+  cursor: pointer;
+  line-height: 1;
+}
+.chip.on { color: var(--stage-lo); background: var(--amber); }
+.tick-clock {
+  font-family: var(--pixfont);
+  font-size: calc(9 * var(--u));
+  color: var(--paper-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- 6. END-CARD ---------- */
+#endcard {
+  position: absolute;
+  /* Cover the BOARD region only — never the scorebug or transport bands. The
+     transport must stay clickable under the end card so the scrubber can jump
+     back into the match from the score screen (the card cancels server-side
+     end-hold on seek). --topband/--band are the measured band heights that
+     relayout() maintains on :root; in embed mode both are 0 and the card
+     spans the whole iframe as before. */
+  left: 0;
+  right: 0;
+  top: var(--topband, 0px);
+  bottom: var(--band, 0px);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(12 * var(--u));
+  background: radial-gradient(80% 70% at 50% 45%, rgba(16, 11, 7, 0.82), rgba(9, 6, 3, 0.95));
+  z-index: 30;
+  padding: calc(20 * var(--u));
+  text-align: center;
+}
+#endcard.on { display: flex; animation: cardfade 420ms ease-out; }
+@keyframes cardfade { from { opacity: 0; } to { opacity: 1; } }
+#endcard .headline { color: var(--tc, var(--ghost)); }
+#endcard .headline {
+  font-family: var(--pixfont);
+  font-size: calc(30 * var(--u));
+  line-height: 1.05;
+  color: var(--paper);
+  text-shadow: 0 calc(3 * var(--u)) 0 var(--ink);
+  /* headline now carries the (possibly long) policy name — never wrap/overflow */
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#endcard .how {
+  font-family: var(--finefont);
+  font-size: calc(11 * var(--u));
+  letter-spacing: 0.05em;
+  color: var(--paper-dim);
+  max-width: calc(360 * var(--u));
+}
+/* win-condition chip — names HOW the match ended (heart / elimination / time) */
+#endcard .wincond {
+  font-family: var(--pixfont);
+  font-size: calc(10 * var(--u));
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--amber);
+  padding: calc(3 * var(--u)) calc(10 * var(--u));
+  box-shadow: inset 0 0 0 1px rgba(232, 163, 61, 0.5);
+}
+#endcard .how {
+  margin-top: calc(-4 * var(--u));
+}
+/* match-stats scoreboard — one panel per team, winner ringed in amber.
+   Wraps + centers so a 3rd/4th team panel folds to a second row. */
+#endcard .ec-teams {
+  display: flex;
+  gap: calc(22 * var(--u));
+  align-items: stretch;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+#endcard .ec-team {
+  width: calc(215 * var(--u));
+  padding: calc(9 * var(--u)) calc(12 * var(--u));
+  background: rgba(20, 14, 9, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(242, 232, 216, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: calc(5 * var(--u));
+  text-align: left;
+}
+#endcard .ec-team.win {
+  box-shadow: inset 0 0 0 1px rgba(232, 163, 61, 0.65),
+    0 0 calc(14 * var(--u)) rgba(232, 163, 61, 0.18);
+}
+#endcard .ec-tname {
+  font-family: var(--pixfont);
+  font-size: calc(13 * var(--u));
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#endcard .ec-tname { color: var(--tc, var(--paper)); }
+#endcard .ec-lives { display: flex; align-items: baseline; gap: calc(6 * var(--u)); font-family: var(--pixfont); }
+#endcard .fl-num { font-size: calc(22 * var(--u)); color: var(--tc, var(--paper)); }
+/* mixed-team policy subheader: groups a team panel's rows by policy when a
+   team seats more than one (CTF-Doubles: two policies per side) */
+#endcard .ec-pol {
+  font-family: var(--finefont);
+  font-size: calc(7.5 * var(--u));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  margin-top: calc(3 * var(--u));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#endcard .fl-cap {
+  font-family: var(--finefont);
+  font-size: calc(8 * var(--u));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+}
+#endcard .ec-thead,
+#endcard .ec-row {
+  display: grid;
+  grid-template-columns: 1fr calc(22 * var(--u)) calc(22 * var(--u)) calc(26 * var(--u)) calc(26 * var(--u));
+  gap: calc(5 * var(--u));
+  align-items: center;
+}
+#endcard .ec-thead {
+  font-family: var(--finefont);
+  font-size: calc(7.5 * var(--u));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  border-bottom: 1px solid rgba(242, 232, 216, 0.18);
+  padding-bottom: calc(3 * var(--u));
+}
+#endcard .ec-thead span:not(:first-child) { text-align: center; }
+#endcard .ec-row {
+  font-family: var(--pixfont);
+  font-size: calc(10.5 * var(--u));
+  color: var(--paper);
+  padding: calc(1.5 * var(--u)) 0;
+}
+#endcard .ec-row .n { text-align: center; font-variant-numeric: tabular-nums; }
+/* a 4-team match can retire several rival hearts (GV32: a capture eliminates
+   its team and play continues), so the Cap cell lays its hearts in a row,
+   later hearts shingling over earlier ones so three still fit the column */
+#endcard .ec-row .n.cap {
+  color: var(--amber);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+#endcard .ec-row .n.cap > * + * { margin-left: calc(-7 * var(--u)); }
+#endcard .ec-row .pname {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--paper-dim);
+}
+#endcard .ec-row.mvp .pname { color: var(--amber); }
+/* name cell: name ellipsizes (but keeps a readable floor), the capture mark
+   + honor badges ride after it; a pathological pileup clips inside the cell
+   rather than bleeding into the K column */
+#endcard .ec-row .pcell {
+  display: flex;
+  align-items: center;
+  gap: calc(3 * var(--u));
+  min-width: 0;
+  overflow: hidden;
+}
+#endcard .ec-row .pcell .pname { flex: 0 1 auto; min-width: 7ch; }
+/* honor badges: baked 2x pixel-art icons (nano-banana), luminance-keyed to
+   transparency; a repeat count rides after the icon as fine print */
+#endcard .ec-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(1 * var(--u));
+  font-family: var(--finefont);
+  font-size: calc(7.5 * var(--u));
+  color: var(--paper-dim);
+  font-variant-numeric: tabular-nums;
+}
+#endcard .ec-badge::before {
+  content: '';
+  display: block;
+  height: calc(14 * var(--u));
+  background-size: contain;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+#endcard .ec-badge.bs::before { width: calc(10.5 * var(--u)); background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABUAAAAcCAYAAACOGPReAAAFD0lEQVR42qWWX2wc1RXGf2dmZ2d3/TfO2qzjOEkdOxGhEJGIFhIodVqME2goBAfVRFUFUlS1D62qVv2jisXiCb9VraiIxEOlthKOKrV9AARSTR8qEAIKliCghpAG0drGya4d7+7s3N39+rBZY7VNGujVHc2VRufTOd/5znfH+JRLYAbSHffeT6Z8N/uvu56lxDGbnj7l8X8s5fMe9UYNmUddORYW9gDYpwITZob02NggFg7wUqLC+cWbKV/8tc3NlbyrKVMTE74uJbD2fnxfB6IHnwwHqwv28l+etLm5EsD/BDWQnTxZN1AL0AyxEvbgeyN4Jj7yVpTHa31PXL5EmZlJE4dypL1jtHU+Zb/8bUFgyo/1EHp9JJJFSvFrNvVcudW4K2f66KNNvtusA8e1/L10nw4d2moghr0aXjCIGhds6rkV5fFagJ+oURo/ciPEN9DQKjn7G/1Lvj3+0l/XZ3jVoAIjnzdef30rVYZR6jT9lZ9y4NZnef/Mi9B/AaawKRqfCNRAOjI+zUW/Sh9vUV9N8/Vjt/DMC/P285lH/j3mit3XxIRvID0w/iVqFoK3CrXvc8/YD7lp+zKL1T/p8OEf6NjBb68Nw5VA1/T44Hgnjpup+RU2RHsZ7G1n3x6PSu139vQfXiT038X8wvrYxHoJNTVoTdLzebOpqbqOju/EedtI+kt4tW184fP9pMJp6zvwsjSbMBv94zoJNi7L6RqPk3cNUeY41WCZztX9bLtmJw9N+OzYvxuyq2Ctrf/gVJIvaXukaIfOnUsDpttvT1Cr30VVISz3sbE9xzeODNPd8YRZ78VmUQgpKWm4UqkMS/IBEpcO28ANhM6DbLYKnCOXGaIY76C3d5lsx2GGNneT7TlDsfC0lP+4F2V6yZBLpVItGs8mgF0OlwFqQRDA2bPzBpJjjIgVfvTQKBszwySVprTyiI3c+4E0mwDqAGT4J7gBCDznXE8QBGnPOdeFI8RRda7sopGRAX153yZkuzDVeeH5LnLb03QN/J5i8RfNho7WzUySPGCXc3hAFASEzrnORBwHp9uCuG/+1Kn3crWa9MYrQ2Q6HyayC/R5tzHQ00vhLDSSP7EbHixIk00vLZU2Ab04OoMgeBOI4zjY4RyLifZ2m9fs7FL/6GgNQPeMPUA5WSUo55g8+FnGvpitz5/P+++8e0avvhrEcXytpLRzTgEsEXAKqJtZXdJbYWj1psAn8O0kdX3t7lv4KLqfRhW+c98kd96W48N/fO/80Fee2kjUR9WShKErU65kyMybWW1VyrXBAPC2mVUkmWlmxrejR+sandyKv/gtBjK7OXrHXu68NcuHhcfYMjpNFGWdr61BkK4TUyTJe8sspzIuMxQQBGXHB5kMC5cybk6RDuz9HJb6JuM37eHhr+7GD//Mavk3bDrwK4gGIRUTx72YpQmCxUqlEqfTaQE+sAqsmFl1zaX0xI8nGew/QXZDG1typ+lof4fG0Hfp6jsDJAFXonRNG8nPAH6VxlJIeBpoNIePLUDFzBZat4Xp/ed/Rld7mnT7HKnrn+TECTh+fAuustlBHRI0gsaFMLYkyaQAhyNDQMo5Z1JQSiZ5ozX3V7iCFRSLxQ2SuiR1lMvlQUmDhUKhO4q0U1K7pK4o0s5CodD9XwBmfM3OJqQZX8Kkj01GUqokba6qeqOkNECkaCSKol2FQqG75WxX+bMgu/Rsqkq7JYXr7bFS0VBVuu5y8f8CyPZwOPj4umUAAAAASUVORK5CYII="); }
+#endcard .ec-row .n.clstr { color: var(--amber); }
+#endcard .ec-heart {
+  display: inline-block;
+  height: calc(14 * var(--u));
+  vertical-align: middle;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+}
+#endcard .ec-heart.red { width: calc(14.5 * var(--u)); background-image: url("data:image/png;base64,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"); }
+#endcard .ec-heart.blue { width: calc(15 * var(--u)); background-image: url("data:image/png;base64,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"); }
+#endcard .ec-heart.green { width: calc(14.5 * var(--u)); background-image: url("data:image/png;base64,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"); }
+#endcard .ec-heart.yellow { width: calc(14.5 * var(--u)); background-image: url("data:image/png;base64,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"); }
+/* a team without baked heart art gets a tinted glyph instead (fallback) */
+#endcard .ec-heart-glyph {
+  color: var(--tc, var(--amber));
+  font-size: calc(12 * var(--u));
+  line-height: 1;
+}
+/* loop countdown — present only while the server holds the end segment */
+#endcard .ec-replay {
+  font-family: var(--finefont);
+  font-size: calc(9 * var(--u));
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  min-height: calc(12 * var(--u));
+}
+#endcard .ec-replay b { color: var(--paper); font-variant-numeric: tabular-nums; }
+
+/* connection status — fine print, lower-left */
+#status {
+  position: absolute;
+  left: calc(10 * var(--u));
+  bottom: calc(62 * var(--u));
+  font-family: var(--finefont);
+  font-size: calc(8 * var(--u));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ghost);
+  /* above the locker-room curtain (25): connection state stays readable
+     while the pre-load scene is up */
+  z-index: 26;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+#status.show { opacity: 1; }
+@keyframes lk-flicker {
+  0%, 86%, 90%, 95%, 100% { opacity: 1; }
+  88% { opacity: 0.78; }
+  93% { opacity: 0.9; }
+}
+@keyframes lk-breathe { from { transform: scale(1); } to { transform: scale(1.03); } }
+/* each pose owns a crossfaded 1/5 window of its bot's cycle (delay-shifted) */
+@keyframes lk-pose {
+  0% { opacity: 0; }
+  4% { opacity: 1; }
+  20% { opacity: 1; }
+  24% { opacity: 0; }
+  100% { opacity: 0; }
+}
+/* idle sway per seat: subtle, distinct tempi so the row never metronomes */
+@keyframes lk-sway { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-1.5px) rotate(0.6deg); } }
+@keyframes lk-scan { from { left: -34%; } to { left: 100%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  #lockerroom * { animation: none !important; }
+  /* with the carousels stopped, hold each bot's rest pose over the plate */
+  #lockerroom .lk-boto img:first-child { opacity: 1; }
+}
+
+/* ============================================================
+   The replay is ONE fixed-aspect composition (relayout() sizes #stage to the
+   board's 1235:659 aspect inside the embed box), so there is no portrait/reflow
+   case: at every container shape the board and its overlays scale together as a
+   single unit and stay pinned. The only responsive lever is chrome DENSITY —
+   `.tiny` eases the reserves so the 640×360 floor stays legible.
+   ============================================================ */
+/* very small floor (≤620px stage): tighten reserves */
+#stage.tiny #killfeed { min-height: calc(3 * 20 * var(--u)); width: calc(190 * var(--u)); }
+#stage.tiny .plate .squad-pip { width: calc(6 * var(--u)); height: calc(6 * var(--u)); }
+
+@media (prefers-reduced-motion: reduce) {
+  #grain, .clock.amb { animation: none; }
+  .plate.leader .lives-num { animation: none; }
+  .banner-chip, .feed-row { animation-duration: 1ms; }
+}
+
+/* ============================================================
+   EMBED MODE — inside the League Replayer shell (?embed=1)
+   The shell owns the walls + team headers + KDA + standings + transport, drawn
+   from the postMessage frame stream. Here we show the board (the lit pit floor)
+   PLUS the designed broadcast feedback layer that belongs over the play area —
+   the kill feed and the flag-event banner lane (lower-third / center wipes).
+   We hide only the chrome the shell re-draws (scorebug/transport) and the
+   ambient light-pool/grain/status, and let the board fill the embed box.
+   ============================================================ */
+body[data-embed] #scorebug,
+body[data-embed] #transport,
+body[data-embed] #lightpool,
+body[data-embed] #grain,
+body[data-embed] #status { display: none !important; }
+body[data-embed] #board { top: 0; height: 100%; }
+</style>
+<!-- ============================================================
+     HALITE additions to the inherited coworld-ctf chrome
+     ============================================================
+     Everything above this banner is coworld-ctf's classic broadcast page:
+     its palette and typography tokens, its stage/board/scorebug/feed/
+     transport/endcard CSS and DOM, verbatim, with client/chrome_common.js and
+     client/broadcast_core.js copied BYTE-FOR-BYTE, and
+     replay-viewer/static_replay{,_worker}.js + replay-viewer/config.nims taken
+     from the same starter so the emscripten link flags and the JS bootstrap
+     can never disagree (cogame-lantern, 2026-08-23).
+
+     REMOVED from the inherited page, because nothing in Halite maps onto them:
+     the eye-level raycaster PiP (#fpv, #fpv-canvas, #fpv-cap, #fpv-gear,
+     #fpv-grip, #fpv-hp, #fpv-hud, #fpv-map, #fpv-map-canvas, #fpv-name), the
+     pre-load locker room (#lockerroom, #lk-art, #lk-bg, #lk-cap, #lk-sprites),
+     #povBadge, and ALL of the zoom/minimap panel (#viewpanel, #zoombar,
+     #zoom-in, #zoom-out, #zoom-read, #zoom-slider, #minimap, #minimap-canvas,
+     #mmwarn) -- the board is a FIXED 21x21 arena that always fits the frame,
+     so the pin's rule removes the view panel, and the wasm-viewer CI job keeps
+     --strict-text-bounds. Their CSS blocks went with them.
+
+     FOUR of the ids on the removal list stay in the DOM as hidden stubs:
+     #momentum, #lulls, #ffwd-chip and #ffwd-mini. chrome_common.js -- which is
+     pinned BYTE-FOR-BYTE -- dereferences all four unconditionally inside
+     renderTransport()/renderMomentum()/renderLullSpans(), so deleting the
+     nodes would throw on the first frame. They are display:none and never
+     written to. Removing them means editing the byte-for-byte file, which the
+     pin forbids.
+
+     The game's own rendering is the RECORDED per-turn state drawn by
+     replay-viewer/halite_replay.nim; nothing is re-simulated in the browser.
+
+     Nothing below touches the transport band. relayout() still owns
+     --hudscale, --topband and --band on :root, the board is fitted BETWEEN the
+     two bands, the endcard still stops at bottom: var(--band, 0px) and is
+     dismissed by every seek, and every scrubber beat this block draws is a
+     LABELLED, CLICKABLE BUTTON that seeks on click, styled for EVERY kind
+     server/cogame_halite/events.py emits -- convert, collide, yardraze,
+     eliminate, lead and guard. The builder carries the halite- prefix
+     (haliteBeat) precisely so it can never be shadowed by the chrome alias
+     block's own hoisted declaration of the shared one (cogame-tandem,
+     2026-08-23); tests/test_viewer.py asserts the whole alias list.
+     ============================================================ -->
+<style>
+/* --- scorebug: halite plate contents -------------------------------------- */
+/* The plate name must survive a 360px featured-match iframe: it grows into
+   whatever room the plate has and ellipsises only when it genuinely runs out,
+   never collapsing to a bare "…". */
+.plate-name {
+  flex: 1 1 auto;
+  min-width: 3.2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--finefont);
+  font-size: calc(9 * var(--u));
+  letter-spacing: 0.06em;
+  color: var(--paper-dim);
+}
+.plate .swatch {
+  flex: none;
+  width: calc(9 * var(--u));
+  height: calc(9 * var(--u));
+  background: var(--tc, var(--paper));
+  box-shadow: 0 0 0 calc(1 * var(--u)) rgba(12, 9, 6, 0.7);
+}
+.plate .hal-id { display: flex; flex-direction: column; min-width: 0; gap: calc(2 * var(--u)); }
+.plate .hal-top { display: flex; align-items: baseline; gap: calc(6 * var(--u)); min-width: 0; }
+.plate.side-r .hal-top { flex-direction: row-reverse; }
+.plate .hal-alias {
+  font-family: var(--pixfont);
+  font-size: calc(15 * var(--u));
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--tc, var(--paper));
+  text-shadow: 0 calc(2 * var(--u)) 0 var(--ink);
+  flex: none;
+}
+.plate .hal-bank {
+  font-family: var(--pixfont);
+  font-size: calc(21 * var(--u));
+  line-height: 1;
+  color: var(--paper);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.plate .hal-sub {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  font-family: var(--finefont);
+  font-size: calc(8 * var(--u));
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  white-space: nowrap;
+}
+.plate.side-r .hal-sub { flex-direction: row-reverse; }
+.plate .hal-risk.hot { color: var(--red); }
+.plate .crown { color: var(--amber); font-size: calc(12 * var(--u)); flex: none; }
+.plate.out { opacity: 0.42; filter: grayscale(0.85); }
+
+/* Under 640px of board the secondary labels go: the plates read
+   "▮ ALPHA 4820" plus the clock, and the scorebug stays legible at 360px. */
+#stage.tiny .plate .hal-sub,
+#stage.tiny .plate .plate-name { display: none; }
+
+/* --- feed lines the halite event vocabulary emits ------------------------- */
+.feed-row .hal-amount { color: var(--amber); font-family: var(--pixfont); }
+.feed-row .hal-note { color: var(--paper-dim); font-style: italic; }
+.feed-row .who { color: var(--tc, var(--paper)); }
+
+/* --- scrubber beats: one rule per kind events.py emits --------------------- */
+/* Buttons, not divs: each carries a title + aria-label and seeks on click. */
+button.beat-marker {
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  appearance: none;
+  background: var(--paper-dim);
+}
+.beat-marker.convert {
+  background: var(--tc, var(--paper));
+  width: calc(3 * var(--u));
+  height: calc(11 * var(--u));
+}
+.beat-marker.collide {
+  background: var(--tc, var(--red));
+  width: calc(2 * var(--u));
+  height: calc(7 * var(--u));
+  opacity: 0.9;
+}
+.beat-marker.yardraze {
+  background: var(--tc, var(--red));
+  width: calc(3 * var(--u));
+  height: calc(13 * var(--u));
+}
+.beat-marker.eliminate {
+  background: var(--ghost);
+  width: calc(3 * var(--u));
+  height: calc(14 * var(--u));
+}
+.beat-marker.lead {
+  background: var(--tc, var(--amber));
+  width: calc(2 * var(--u));
+  height: calc(12 * var(--u));
+  opacity: 0.85;
+}
+.beat-marker.guard {
+  background: var(--amber);
+  width: calc(3 * var(--u));
+  height: calc(14 * var(--u));
+}
+
+/* --- endcard standings ---------------------------------------------------- */
+#endcard .ec-rank {
+  font-family: var(--pixfont);
+  font-size: calc(11 * var(--u));
+  color: var(--amber);
+  letter-spacing: 0.12em;
+}
+#endcard .ec-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(10 * var(--u));
+  font-family: var(--finefont);
+  font-size: calc(8.5 * var(--u));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+}
+#endcard .ec-stat b { color: var(--paper); font-weight: 600; }
+
+/* The four chrome_common.js stubs (see the banner comment): present so the
+   byte-for-byte shared chrome can dereference them, never drawn. */
+#momentum, #lulls, #ffwd-chip, #ffwd-mini { display: none !important; }
+</style>
+</head>
+<body>
+<div id="viewport">
+<div id="stage">
+  <canvas id="board"></canvas>
+  <div id="lightpool"></div>
+  <div id="grain" class="amb"></div>
+
+  <div id="chrome">
+    <!-- Four plates, two per column, built by buildScorebug(): colour swatch,
+         alias, REAL policy name, banked halite (big, tabular), cargo afloat,
+         ships, yards, halite at risk, a crown on the leader and a grey wash on
+         an eliminated seat. -->
+    <div id="scorebug">
+      <div class="plates" id="plates-l"></div>
+
+      <div class="clock-col">
+        <div class="clock amb" id="clock">
+          <div class="time" id="clock-time">TURN 0</div>
+          <span class="ffwd-mini" id="ffwd-mini">&#9656;&#9656;</span>
+          <div class="caption" id="clock-caption">Loading replay</div>
+        </div>
+      </div>
+
+      <div class="plates" id="plates-r"></div>
+    </div>
+
+    <div id="bannerlane"></div>
+    <div id="killfeed"></div>
+
+    <div id="transport">
+      <!-- Buttons on top, scrubber/timeline below (the transport sits in its own
+           reserved band under the board, so nothing here overlaps play). -->
+      <div class="tbar">
+        <button class="tbtn" id="btn-restart" title="Restart (,)">&#10226;</button>
+        <button class="tbtn" id="btn-back" title="Back one turn (b)">&#9666;|</button>
+        <button class="tbtn" id="btn-play" title="Play / pause (space)">&#9654;</button>
+        <button class="tbtn" id="btn-fwd" title="Skip +5 turns (.)">+5</button>
+        <button class="tbtn" id="btn-end" title="Jump to end (e)">|&#9656;</button>
+        <button class="tbtn" id="btn-loop" title="Loop">&#8635;</button>
+        <button class="tbtn" id="btn-skip" title="Skip +20 turns">&#9656;&#9656;</button>
+        <button class="tbtn" id="btn-spoilers" title="Spoilers: the ram / yard / elimination story and the winner on the timeline ahead of the playhead (o)">spoilers</button>
+        <span class="ffwd-chip" id="ffwd-chip">&#9656;&#9656;</span>
+        <span class="win-chip" id="win-chip"></span>
+        <span class="tick-clock" id="tick-clock">0 / 0</span>
+        <span class="tsep"></span>
+        <div class="speedchips" id="speedchips"></div>
+      </div>
+      <div class="scrub" id="scrub">
+        <svg class="momentum" id="momentum" viewBox="0 0 1000 100"
+             preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="scrub-track"></div>
+        <div class="scrub-fill" id="scrub-fill"></div>
+        <div id="lulls"></div>
+        <div class="scrub-win" id="scrub-win"></div>
+        <div class="scrub-head" id="scrub-head"></div>
+      </div>
+    </div>
+
+    <div id="endcard">
+      <div class="headline" id="ec-headline">&mdash;</div>
+      <div class="wincond" id="ec-wincond"></div>
+      <div class="how" id="ec-how"></div>
+      <div class="ec-teams" id="ec-teams"></div>
+      <div class="ec-replay" id="ec-replay"></div>
+    </div>
+  </div>
+
+  <div id="status">loading replay</div>
+</div>
+</div>
+
+<script src="./chrome_common.js"></script>
+<script src="./static_replay.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // The shared replay chrome (chrome_common.js, byte-for-byte from
+  // coworld-ctf). It owns the transport band contract: --band/--topband/
+  // --hudscale on :root, the scrubber geometry, the spoiler gate and the
+  // verdict cap.
+  if (!window.ChromeCommon) {
+    document.documentElement.setAttribute(
+      'data-replay-error', 'chrome_common.js did not load');
+    return;
+  }
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------------------------------------------------------------- state
+  var doc = null;              // the parsed replay document
+  var turnIndex = 0;
+  var playing = true;
+  var looping = false;
+  var speed = 1;
+  var lastState = null;
+  var core = null;
+  var shimMode = new URLSearchParams(location.search).get('shim') === '1';
+  var readyPosted = false;
+
+  var C = window.ChromeCommon({
+    send: function (cmd) { transportCommand(cmd); },
+    sendPov: function () {},
+    getState: function () { return lastState; }
+  });
+  // Aliases, exactly as the inherited chrome expects them. The game block
+  // below NEVER declares any of these names again: the chrome alias block
+  // hoists `var markBeat`, so a game-block `function markBeat` would be
+  // silently swallowed and the scrubber would end up with unlabelled div
+  // markers that never seek (cogame-tandem, 2026-08-23). tests/test_viewer.py
+  // runs a scope-duplication check over this list.
+  var AMBER = C.AMBER, PAPER = C.PAPER;
+  var esc = C.esc, setName = C.setName;
+  var markBeat = C.markBeat, renderBeatMarkers = C.renderBeatMarkers;
+  var renderTransport = C.renderTransport, renderClock = C.renderClock;
+  var setVerdict = C.setVerdict, getSpoilers = C.getSpoilers;
+  var SPEEDS = C.SPEEDS;
+
+  var MS_PER_TURN = 125;       // 1x: a 400-turn episode plays in 50 s
+  var FEED_MAX = 12;
+
+  // ------------------------------------------------------------- layout
+  // relayout() owns --hudscale, --topband and --band on :root and fits the
+  // board BETWEEN the two bands, so no overlay ever sits in the transport
+  // band. It iterates to a fixed point because the band heights are
+  // themselves measured in --u.
+  function relayout() {
+    var stage = $('stage');
+    var root = document.documentElement;
+    var w = stage.clientWidth || 1;
+    var h = stage.clientHeight || 1;
+    var scale = Math.max(0.55, Math.min(1.35, Math.min(w / 1235, h / 659)));
+    root.style.setProperty('--hudscale', String(scale));
+    stage.classList.toggle('tiny', w < 640);
+    for (var pass = 0; pass < 4; pass++) {
+      var top = Math.round($('scorebug').getBoundingClientRect().height);
+      var band = Math.round($('transport').getBoundingClientRect().height);
+      var prevTop = root.style.getPropertyValue('--topband');
+      var prevBand = root.style.getPropertyValue('--band');
+      root.style.setProperty('--topband', top + 'px');
+      root.style.setProperty('--band', band + 'px');
+      if (prevTop === top + 'px' && prevBand === band + 'px') break;
+    }
+    if (core) core.setViewportFit();
+  }
+  window.addEventListener('resize', relayout);
+
+  // -------------------------------------------------------------- helpers
+  function seatColor(seat) {
+    return (doc && doc.colors && doc.colors[seat]) || PAPER;
+  }
+  function alias(seat) {
+    return (doc && doc.aliases && doc.aliases[seat]) || ('SEAT ' + seat);
+  }
+  function shortAlias(seat) {
+    return alias(seat).replace(/^FLEET-/, '');
+  }
+  function realName(seat) {
+    return (doc && doc.names && doc.names[seat]) || '';
+  }
+  function cellText(pos) {
+    var size = (doc && doc.config && doc.config.size) || 21;
+    return '(' + (pos % size) + ',' + (size - 1 - Math.floor(pos / size)) + ')';
+  }
+  function turnAt(i) {
+    return doc.turns[Math.max(0, Math.min(doc.turns.length - 1, i))];
+  }
+  function bankOf(rec, seat) {
+    var p = rec.players && rec.players[seat];
+    return p ? p[0] : 0;
+  }
+  function shipsOf(rec, seat) {
+    var p = rec.players && rec.players[seat];
+    return p ? Object.keys(p[2]).length : 0;
+  }
+  function yardsOf(rec, seat) {
+    var p = rec.players && rec.players[seat];
+    return p ? Object.keys(p[1]).length : 0;
+  }
+  function afloatOf(rec, seat) {
+    var p = rec.players && rec.players[seat];
+    if (!p) return 0;
+    var total = 0;
+    for (var id in p[2]) total += p[2][id][1];
+    return total;
+  }
+  // A ship is AT RISK iff some enemy ship with cargo <= its own is within
+  // torus Manhattan distance 1 — the exact predicate the ram rule uses next
+  // turn (the same one halite_replay.nim draws the halo from).
+  function riskOf(rec, seat) {
+    var size = (doc && doc.config && doc.config.size) || 21;
+    var mine = (rec.players[seat] || [0, {}, {}])[2];
+    var total = 0;
+    for (var id in mine) {
+      var pos = mine[id][0], cargo = mine[id][1];
+      if (cargo <= 0) continue;
+      var x = pos % size, y = Math.floor(pos / size);
+      var hit = false;
+      for (var other = 0; other < rec.players.length && !hit; other++) {
+        if (other === seat) continue;
+        var theirs = rec.players[other][2];
+        for (var tid in theirs) {
+          if (theirs[tid][1] > cargo) continue;
+          var tp = theirs[tid][0];
+          var tx = tp % size, ty = Math.floor(tp / size);
+          var dx = Math.abs(tx - x), dy = Math.abs(ty - y);
+          if (Math.min(dx, size - dx) + Math.min(dy, size - dy) <= 1) { hit = true; break; }
+        }
+      }
+      if (hit) total += cargo;
+    }
+    return total;
+  }
+
+  // ------------------------------------------------------------- scorebug
+  var plateEls = [];
+  function buildScorebug() {
+    var seats = doc.aliases.length;
+    plateEls = [];
+    $('plates-l').innerHTML = '';
+    $('plates-r').innerHTML = '';
+    $('plates-l').className = 'plates';
+    $('plates-r').className = 'plates';
+    for (var seat = 0; seat < seats; seat++) {
+      var side = seat % 2 === 0 ? 'l' : 'r';
+      var plate = document.createElement('div');
+      plate.className = 'plate side-' + side;
+      plate.style.setProperty('--tc', seatColor(seat));
+      plate.innerHTML =
+        '<span class="swatch"></span>' +
+        '<span class="hal-id">' +
+          '<span class="hal-top">' +
+            '<span class="hal-alias"></span>' +
+            '<span class="plate-name"></span>' +
+            '<span class="hal-bank">0</span>' +
+            '<span class="crown"></span>' +
+          '</span>' +
+          '<span class="hal-sub">' +
+            '<span class="hal-afloat"></span>' +
+            '<span class="hal-fleet"></span>' +
+            '<span class="hal-risk"></span>' +
+          '</span>' +
+        '</span>';
+      plate.querySelector('.hal-alias').textContent = shortAlias(seat);
+      plate.querySelector('.plate-name').textContent = realName(seat);
+      plate.querySelector('.plate-name').title = realName(seat);
+      $('plates-' + side).appendChild(plate);
+      plateEls.push(plate);
+    }
+  }
+
+  function renderScorebug(rec) {
+    var leader = -1, best = -Infinity;
+    for (var i = 0; i < plateEls.length; i++) {
+      if (isOut(rec, i)) continue;
+      if (bankOf(rec, i) > best) { best = bankOf(rec, i); leader = i; }
+    }
+    for (var seat = 0; seat < plateEls.length; seat++) {
+      var plate = plateEls[seat];
+      var risk = riskOf(rec, seat);
+      plate.querySelector('.hal-bank').textContent = String(bankOf(rec, seat));
+      plate.querySelector('.hal-afloat').textContent = 'afloat ' + afloatOf(rec, seat);
+      plate.querySelector('.hal-fleet').textContent =
+        shipsOf(rec, seat) + ' ships · ' + yardsOf(rec, seat) + ' yards';
+      var riskEl = plate.querySelector('.hal-risk');
+      riskEl.textContent = 'at risk ' + risk;
+      riskEl.classList.toggle('hot', risk > 0);
+      plate.querySelector('.crown').textContent = seat === leader ? '♔' : '';
+      plate.classList.toggle('out', isOut(rec, seat));
+    }
+  }
+
+  var eliminatedAt = [];
+  function isOut(rec, seat) {
+    return eliminatedAt[seat] != null && rec.t >= eliminatedAt[seat];
+  }
+
+  // ---------------------------------------------------------------- clock
+  function renderHaliteClock(rec) {
+    var mix = phaseOf(rec);
+    setName('clock-time', 'TURN ' + rec.t + ' / ' + (doc.turns.length - 1));
+    setName('clock-caption', mix);
+  }
+  function phaseOf(rec) {
+    var counts = { mine: 0, deposit: 0, collide: 0 };
+    (rec.events || []).forEach(function (e) {
+      if (counts[e.k] !== undefined) counts[e.k]++;
+    });
+    if (counts.collide > 0) return 'raiding';
+    if (counts.deposit > 0) return 'hauling';
+    return 'mining';
+  }
+
+  // ----------------------------------------------------------------- feed
+  function clearFeed() { $('killfeed').innerHTML = ''; }
+  function pushFeed(html, seat) {
+    var feed = $('killfeed');
+    var row = document.createElement('div');
+    row.className = 'feed-row';
+    if (seat != null) row.style.setProperty('--tc', seatColor(seat));
+    row.innerHTML = html;
+    feed.appendChild(row);
+    while (feed.childNodes.length > FEED_MAX) feed.removeChild(feed.firstChild);
+  }
+  function who(seat) {
+    return '<span class="who">' + esc(shortAlias(seat)) + '</span>';
+  }
+  function applyEvent(e) {
+    if (e.k === 'collide') {
+      var lost = (e.lost || []).map(function (l) { return shortAlias(l.seat); }).join(', ');
+      if (e.survivor) {
+        pushFeed(who(e.survivor.seat) + ' rams ' + esc(lost) + ' at ' + esc(cellText(e.pos)) +
+                 ' — takes <span class="hal-amount">' + (e.stolen || 0) + '</span>', e.survivor.seat);
+      } else {
+        pushFeed('mutual wreck at ' + esc(cellText(e.pos)) + ' — ' + esc(lost) + ' both lost', null);
+      }
+    } else if (e.k === 'deposit') {
+      pushFeed(who(e.seat) + ' banks <span class="hal-amount">' + e.amount + '</span>', e.seat);
+    } else if (e.k === 'convert') {
+      pushFeed(who(e.seat) + ' converts at ' + esc(cellText(e.pos)), e.seat);
+    } else if (e.k === 'yardraze') {
+      pushFeed(who(e.shipSeat) + ' razes ' + esc(shortAlias(e.yardSeat)) + '\u2019s yard at ' +
+               esc(cellText(e.pos)), e.shipSeat);
+    } else if (e.k === 'eliminate') {
+      pushFeed(who(e.seat) + ' is out of the game', e.seat);
+    } else if (e.k === 'note') {
+      pushFeed(who(e.seat) + ' <span class="hal-note">\u201c' + esc(e.text) + '\u201d</span>', e.seat);
+    } else if (e.k === 'fallback') {
+      pushFeed(who(e.seat) + ' <span class="hal-note">fell back (' + esc(e.cause) + ')</span>', e.seat);
+    } else if (e.k === 'strike') {
+      pushFeed(who(e.seat) + ' <span class="hal-note">silent</span>', e.seat);
+    } else if (e.k === 'budget_guard') {
+      pushFeed('<span class="hal-note">budget guard — every fleet on autopilot</span>', null);
+    } else if (e.k === 'spawn') {
+      pushFeed(who(e.seat) + ' spawns at ' + esc(cellText(e.pos)), e.seat);
+    }
+  }
+
+  // ------------------------------------------------------------- beats
+  // Scrubber beats are clickable, LABELLED buttons that seek to their turn.
+  // The builder is named haliteBeat, never markBeat (see the alias note).
+  var beatKeys = {};
+  function haliteBeat(tick, kind, team, label) {
+    var key = tick + '|' + kind + '|' + (team == null ? '' : team);
+    if (beatKeys[key]) return;
+    beatKeys[key] = true;
+    var span = Math.max(1, doc.turns.length - 1);
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'beat-marker ' + kind;
+    btn.style.left = (Math.min(1, Math.max(0, tick / span)) * 100) + '%';
+    if (team != null) btn.style.setProperty('--tc', seatColor(team));
+    btn.textContent = '';
+    btn.title = label + ' — turn ' + tick;
+    btn.setAttribute('aria-label', label + ' at turn ' + tick);
+    btn.__tick = tick;
+    btn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      seek(tick);
+    });
+    $('scrub').appendChild(btn);
+  }
+
+  function placeBeats() {
+    doc.turns.forEach(function (rec) {
+      (rec.events || []).forEach(function (e) {
+        if (e.k === 'convert') haliteBeat(rec.t, 'convert', e.seat, 'yard');
+        else if (e.k === 'collide') {
+          haliteBeat(rec.t, 'collide', e.survivor ? e.survivor.seat : null, 'ram');
+        } else if (e.k === 'yardraze') haliteBeat(rec.t, 'yardraze', e.shipSeat, 'raze');
+        else if (e.k === 'eliminate') haliteBeat(rec.t, 'eliminate', e.seat, 'out');
+        else if (e.k === 'lead') haliteBeat(rec.t, 'lead', e.seat, 'lead');
+        else if (e.k === 'budget_guard') haliteBeat(rec.t, 'guard', null, 'guard');
+      });
+    });
+  }
+
+  // -------------------------------------------------------------- endcard
+  function renderEndcard() {
+    var results = doc.results || {};
+    var card = $('endcard');
+    var ranking = results.ranking || [];
+    var winner = results.winner;
+    setName('ec-headline',
+      winner == null ? 'DRAWN' : (realName(winner) || shortAlias(winner)) + ' WINS');
+    if (winner != null) card.style.setProperty('--tc', seatColor(winner));
+    setName('ec-wincond', String((doc.stop && doc.stop.rule) || 'full_time').replace('_', ' '));
+    setName('ec-how',
+      'Most banked halite at turn ' + (doc.turns.length - 1) +
+      '. Reason: ' + (results.reason || '—') + '.');
+    var host = $('ec-teams');
+    host.innerHTML = '';
+    ranking.forEach(function (seat, index) {
+      var panel = document.createElement('div');
+      panel.className = 'ec-team' + (results.placement && results.placement[seat] === 1 ? ' win' : '');
+      panel.style.setProperty('--tc', seatColor(seat));
+      var rows = [
+        ['banked', results.banked ? results.banked[seat] : 0],
+        ['mined', results.mined ? results.mined[seat] : 0],
+        ['stolen', results.stolen ? results.stolen[seat] : 0],
+        ['rams won / lost', (results.collisions_won ? results.collisions_won[seat] : 0) + ' / ' +
+                            (results.collisions_lost ? results.collisions_lost[seat] : 0)],
+        ['ships built', results.ships ? results.ships[seat] : 0],
+        ['eliminated', results.eliminated_turn && results.eliminated_turn[seat] != null
+          ? 'turn ' + results.eliminated_turn[seat] : '—']
+      ];
+      panel.innerHTML =
+        '<div class="ec-rank">#' + (index + 1) + '</div>' +
+        '<div class="ec-tname">' + esc(shortAlias(seat)) + ' · ' + esc(realName(seat)) + '</div>' +
+        rows.map(function (r) {
+          return '<div class="ec-stat"><span>' + esc(r[0]) + '</span><b>' + esc(String(r[1])) + '</b></div>';
+        }).join('');
+      host.appendChild(panel);
+    });
+    setName('ec-replay', 'press , to restart');
+  }
+
+  function showEndcard(on) {
+    $('endcard').classList.toggle('on', !!on);
+  }
+
+  // ------------------------------------------------------------ transport
+  function stateFrame(rec) {
+    return {
+      t: rec.t,
+      st: 0,
+      mx: Math.max(1, doc.turns.length - 1),
+      mt: 0,
+      sp: speed,
+      pl: playing,
+      lp: looping,
+      sk: false,
+      ff: false,
+      en: true,
+      lob: 0,
+      ph: turnIndex >= doc.turns.length - 1 ? 'gameover' : 'playing'
+    };
+  }
+
+  function render() {
+    var rec = turnAt(turnIndex);
+    lastState = stateFrame(rec);
+    renderScorebug(rec);
+    renderHaliteClock(rec);
+    renderTransport(lastState);
+    if (core) core.sendCommand('s:' + rec.t);
+    if (turnIndex >= doc.turns.length - 1) {
+      renderEndcard();
+      showEndcard(true);
+    }
+  }
+
+  function seek(target) {
+    var next = Math.max(0, Math.min(doc.turns.length - 1, target | 0));
+    // Every seek dismisses the endcard.
+    showEndcard(false);
+    if (next !== turnIndex) {
+      turnIndex = next;
+      clearFeed();
+      // Re-run the feed for the turn we land on so the panel is never blank.
+      (turnAt(turnIndex).events || []).forEach(applyEvent);
+    }
+    render();
+  }
+
+  function advance(delta) { seek(turnIndex + delta); }
+
+  function transportCommand(cmd) {
+    var map = { '1': 1, '2': 2, '3': 3, '4': 4, '8': 8, '6': 16 };
+    if (map[cmd]) { speed = map[cmd]; render(); return; }
+    if (cmd === '.') advance(5);
+    else if (cmd === 'b') advance(-1);
+  }
+
+  function wireTransport() {
+    $('btn-restart').addEventListener('click', function () { playing = true; seek(0); });
+    $('btn-back').addEventListener('click', function () { playing = false; advance(-1); });
+    $('btn-play').addEventListener('click', function () { playing = !playing; render(); });
+    $('btn-fwd').addEventListener('click', function () { playing = false; advance(5); });
+    $('btn-end').addEventListener('click', function () { playing = false; seek(doc.turns.length - 1); });
+    $('btn-loop').addEventListener('click', function () { looping = !looping; render(); });
+    $('btn-skip').addEventListener('click', function () { advance(20); });
+    $('scrub').addEventListener('click', function (ev) {
+      if (ev.target && ev.target.classList.contains('beat-marker')) return;
+      var box = this.getBoundingClientRect();
+      var frac = Math.min(1, Math.max(0, (ev.clientX - box.left) / Math.max(1, box.width)));
+      playing = false;
+      seek(Math.round(frac * (doc.turns.length - 1)));
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === ' ') { ev.preventDefault(); playing = !playing; render(); }
+      else if (ev.key === ',') { playing = true; seek(0); }
+      else if (ev.key === 'b') { playing = false; advance(-1); }
+      else if (ev.key === '.') { playing = false; advance(5); }
+      else if (ev.key === 'e') { playing = false; seek(doc.turns.length - 1); }
+      else if (ev.key === 'r') { riskOn = !riskOn; if (core) core.sendCommand('r:' + (riskOn ? 1 : 0)); }
+    });
+  }
+  var riskOn = true;
+
+  // --------------------------------------------------------------- playback
+  var lastFrameAt = 0;
+  var accumulator = 0;
+  function tick(now) {
+    requestAnimationFrame(tick);
+    if (!doc) return;
+    if (!lastFrameAt) lastFrameAt = now;
+    var dt = Math.min(250, now - lastFrameAt);
+    lastFrameAt = now;
+    if (!playing) return;
+    accumulator += dt * speed;
+    var step = MS_PER_TURN;
+    var advanced = false;
+    while (accumulator >= step) {
+      accumulator -= step;
+      if (turnIndex >= doc.turns.length - 1) {
+        if (looping) { turnIndex = 0; clearFeed(); showEndcard(false); advanced = true; }
+        else { playing = false; break; }
+      } else {
+        turnIndex++;
+        advanced = true;
+        (turnAt(turnIndex).events || []).forEach(applyEvent);
+      }
+    }
+    if (advanced) render();
+  }
+
+  // ------------------------------------------------------------------ boot
+  function fail(message) {
+    document.documentElement.setAttribute('data-replay-error', String(message));
+    setName('status', 'Replay failed: ' + message);
+    $('status').classList.add('show');
+  }
+
+  function postReady() {
+    if (readyPosted) return;
+    readyPosted = true;
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ src: 'coworld-replay', type: 'ready' }, '*');
+      }
+    } catch (ignore) { /* cross-origin parent */ }
+  }
+
+  // The bridge `ready` is posted from a callback that runs AFTER
+  // data-replay-loaded="true" is set on <html> — never on rAF timing at the
+  // call site, which let softmax.com sample an unpainted shell (chorus
+  // 2026-08-24). static_replay.js sets the attribute; this observes it.
+  new MutationObserver(function () {
+    if (document.documentElement.getAttribute('data-replay-loaded') === 'true') {
+      postReady();
+    }
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-replay-loaded'] });
+
+  function replayUrl() {
+    return new URLSearchParams(location.search).get('replay') || '/replay-data';
+  }
+
+  function boot(bytes, text) {
+    try {
+      doc = JSON.parse(text);
+    } catch (error) {
+      fail('replay is not valid JSON: ' + error.message);
+      return;
+    }
+    if (!doc || doc.format !== 'cogame-halite-replay' || !doc.turns || !doc.turns.length) {
+      fail('not a cogame-halite replay document');
+      return;
+    }
+    eliminatedAt = (doc.results && doc.results.eliminated_turn) || [];
+    buildScorebug();
+    placeBeats();
+    if (doc.results && doc.results.winner != null) {
+      setVerdict({
+        winner: shortAlias(doc.results.winner),
+        t: doc.stop ? doc.stop.turn : null
+      });
+    } else if (doc.results) {
+      setVerdict({ draw: true, t: doc.stop ? doc.stop.turn : null });
+    }
+    relayout();
+    wireTransport();
+    setName('status', '');
+    render();
+    requestAnimationFrame(tick);
+
+    if (shimMode) {
+      // Renderer fixture only: the wasm entry is shimmed away so the page's
+      // own text path can be driven without a wasm runtime. Everything else
+      // on the page is the shipped chrome.
+      document.documentElement.setAttribute('data-replay-loaded', 'true');
+      return;
+    }
+    core = window.HaliteStaticReplay.createCore({
+      canvas: $('board'),
+      onStatus: function (status) { setName('status', status === 'connecting' ? 'loading replay' : ''); },
+      onFirstFrame: function () { setName('status', ''); },
+      onText: function () {}
+    });
+    core.start(bytes);
+    relayout();
+  }
+
+  fetch(replayUrl(), { credentials: 'omit', mode: 'cors' })
+    .then(function (response) {
+      if (!response.ok) throw new Error('replay request returned HTTP ' + response.status);
+      return response.arrayBuffer();
+    })
+    .then(function (buffer) {
+      var text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+      boot(buffer, text);
+    })
+    .catch(function (error) { fail(error && error.message ? error.message : String(error)); });
+})();
+</script>
+</body>
+</html>
