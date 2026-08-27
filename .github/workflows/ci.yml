@@ -1,0 +1,315 @@
+# CI for Metta-AI/cogame-halite.
+#
+# Adapted from coworld-builder templates/ci.yml. The `test` job is Python
+# (`uv sync --frozen` + `uv run pytest`) instead of the template's Nim
+# recipe, plus the CI-only `fidelity` dependency group that installs
+# kaggle-environments==1.32.7 for the differential gate; everything else --
+# the docker-smoke job, the wasm-viewer job and their gotcha comments -- is the
+# template's.
+#
+# The coworld-builder sandbox has no docker, no nim, no emsdk and no browser:
+# this workflow is the ONLY place those toolchains run. Phase 20's exit
+# criterion is this workflow green on main.
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  SLUG: halite
+  IMAGE: coworld-halite
+  # Pins mirror the Dockerfile wasm-builder stage; bump both together.
+  EMSDK_VERSION: "4.0.15"
+  NIMBY_VERSION: "0.1.27"
+  NIM_VERSION: "2.2.4"
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Python tests. The fidelity gate (tests/test_fidelity.py) is the
+  # acceptance criterion for the whole port and runs here on every push:
+  # 8 seeds x 399 turns of exact-equality differential comparison against a
+  # real kaggle-environments==1.32.7 install, plus 50-seed board generation.
+  # If it fails, the PORT is wrong -- never the test.
+  # ---------------------------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.17"
+          enable-cache: true
+
+      - name: Sync the locked environment
+        run: uv sync --frozen
+
+      # The CI-only `fidelity` group. It installs the REAL distribution, whose
+      # package name collides with the assembled vendor tree, so
+      # tests/test_fidelity.py drives it in a SUBPROCESS with a clean sys.path
+      # -- the production sim never imports it.
+      - name: Sync the CI-only fidelity group
+        run: uv sync --frozen --group fidelity
+
+      - name: Assemble the vendored Halite tree
+        run: uv run python sim/assemble.py --check
+
+      - name: Run the test suite
+        run: uv run pytest -q
+
+  # ---------------------------------------------------------------------
+  # Packaging smoke: the production image builds, and one real 4-seat episode
+  # runs end to end in raw docker with the certification fixture's seat mix.
+  # ---------------------------------------------------------------------
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+
+      # Invoked by path, not through `bash`: a `bash SCRIPT` call ignores the
+      # exec bit, so a 0644 helper would go green here and only fail wherever
+      # it is executed directly.
+      - name: Assert the smoke script is present and executable
+        run: |
+          set -euo pipefail
+          test -f tools/ci/docker_smoke.sh || {
+            echo "::error::tools/ci/docker_smoke.sh is missing"; exit 1; }
+          test -x tools/ci/docker_smoke.sh || {
+            echo "::error::tools/ci/docker_smoke.sh must be committed executable (mode 100755)."
+            echo "::error::Fix with: git update-index --chmod=+x tools/ci/docker_smoke.sh"
+            exit 1; }
+
+      - name: Build image
+        run: docker build --platform=linux/amd64 -t "${IMAGE}:ci" .
+
+      - name: Raw-Docker episode smoke
+        # SMOKE_SEATS is an independent second declaration of the seat count;
+        # docker_smoke.sh takes the real one from
+        # certification.game_config.num_agents and hard-fails on a mismatch.
+        env:
+          SMOKE_SLUG: ${{ env.SLUG }}
+          SMOKE_SEATS: "4"
+          SMOKE_REPLAY_OUT: dist/smoke/halite.replay
+        run: ./tools/ci/docker_smoke.sh "${IMAGE}:ci"
+
+      - name: Assert the smoke results are the closed key set
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, sys
+          sys.path.insert(0, "server")
+          from cogame_halite.results import RESULTS_KEYS
+          doc = json.loads(pathlib.Path("dist/smoke/results.json").read_text())
+          if tuple(doc) != RESULTS_KEYS:
+              raise SystemExit(
+                  f"results key set drifted:\n  smoke {sorted(doc)}\n  code  {sorted(RESULTS_KEYS)}")
+          if doc["reason"] != "complete":
+              raise SystemExit(f"smoke episode ended {doc['reason']!r}, want 'complete'")
+          for key in ("names", "scores", "banked", "placement", "llm_turns"):
+              if len(doc[key]) != 4:
+                  raise SystemExit(f"results.{key} has {len(doc[key])} entries, want 4")
+          print("results OK:", doc["reason"], doc["end_rule"], doc["scores"])
+          PY
+
+      # The replay this episode produced is the ONLY replay in CI that is known
+      # to be a real, current-format episode of this game. wasm-viewer
+      # downloads it and loads it in a browser, so the viewer is tested against
+      # the bytes the platform will actually serve rather than a hand-written
+      # fixture that can drift.
+      - name: Upload the smoke replay
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-replay
+          path: dist/smoke/
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---------------------------------------------------------------------
+  # The static replay viewer. The platform serves THIS bundle from
+  # /v2/coworlds/replays/static/<cow_id>/<sha>/index.html, so a bundle that
+  # does not build (or is missing its wasm) means every hosted replay hangs.
+  # ---------------------------------------------------------------------
+  wasm-viewer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # The bundle is EXECUTED here, not merely built, and it is executed against
+    # the replay docker-smoke just produced -- hence the dependency.
+    needs: docker-smoke
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+
+      # `coworld build` (bundle.py) refuses to package a source replay-viewer
+      # bundle unless the hook is BOTH a file and os.X_OK. Running it as
+      # `bash tools/build_replay_viewer.sh` would ignore the exec bit entirely,
+      # so assert the bit, then invoke by path.
+      - name: Assert the replay-viewer build hook is present and executable
+        run: |
+          set -euo pipefail
+          test -f tools/build_replay_viewer.sh || {
+            echo "::error::tools/build_replay_viewer.sh is missing; coworld build needs it"
+            echo "::error::to emit the static replay bundle"
+            exit 1; }
+          test -x tools/build_replay_viewer.sh || {
+            echo "::error::tools/build_replay_viewer.sh must be committed executable (mode 100755):"
+            echo "::error::coworld build hard-requires os.X_OK on the build hook."
+            echo "::error::Fix with: git update-index --chmod=+x tools/build_replay_viewer.sh"
+            exit 1; }
+
+      - name: Assert the viewer load test is present
+        run: |
+          set -euo pipefail
+          test -s tools/ci/viewer_smoke.mjs || {
+            echo "::error::tools/ci/viewer_smoke.mjs is missing. It is the only gate that"
+            echo "::error::EXECUTES the replay viewer; without it a bundle that deadlocks"
+            echo "::error::(cogame-lantern, 2026-08-23) ships green."
+            exit 1; }
+
+      - name: Build the static replay viewer bundle
+        run: ./tools/build_replay_viewer.sh "$PWD/dist/static-replay-viewer"
+
+      - name: Assert the bundle is complete
+        run: |
+          set -euo pipefail
+          out="$PWD/dist/static-replay-viewer"
+          test -s "${out}/index.html" || {
+            echo "::error::${out}/index.html missing or empty"; exit 1; }
+          wasm_count="$(find "${out}" -name '*.wasm' -size +1c | wc -l | tr -d ' ')"
+          if [ "${wasm_count}" -lt 1 ]; then
+            echo "::error::no non-empty .wasm module in ${out}"
+            find "${out}" -type f | sed 's/^/  /'
+            exit 1
+          fi
+          echo "bundle OK:"
+          find "${out}" -type f -printf '  %p (%s bytes)\n'
+
+      # -----------------------------------------------------------------
+      # The load test. Everything above only proves files EXIST. cogame-lantern
+      # shipped a viewer whose emscripten link flags and whose JS bootstrap came
+      # from two different starters: the factory was never called, no error was
+      # thrown, and softmax.com sat on "Loading replay..." forever with every
+      # file present and 200. Only opening the page in a browser sees that.
+      # -----------------------------------------------------------------
+      - name: Download the smoke replay
+        uses: actions/download-artifact@v4
+        with:
+          name: smoke-replay
+          path: dist/smoke
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Playwright (pinned 1.55.0)
+        run: |
+          set -euo pipefail
+          npm install --no-save playwright@1.55.0
+          npx --yes playwright@1.55.0 install --with-deps chromium
+
+      - name: Load the bundle in a real browser
+        run: |
+          set -euo pipefail
+          # A for-loop, not `ls … | head -1`: under `set -o pipefail` an
+          # unmatched glob makes ls exit 2 and kills the step before the
+          # harness ever runs (cogame-raid 2026-08-23).
+          replay=""
+          for candidate in dist/smoke/*.replay dist/smoke/replay.json; do
+            if [ -f "${candidate}" ]; then replay="${candidate}"; break; fi
+          done
+          test -n "${replay}" || {
+            echo "::error::docker-smoke uploaded no replay to dist/smoke"; ls -la dist/smoke || true; exit 1; }
+          echo "REPLAY=${replay}" >> "$GITHUB_ENV"
+          echo "loading ${replay} in dist/static-replay-viewer"
+          # --strict-text-bounds: the board is a FIXED 21x21 arena that always
+          # fits the frame (the design note drops the zoom bar for exactly that
+          # reason), so a string drawn outside the canvas is a defect.
+          # --soak 12: LOADING IS NOT PLAYING (cogball 0.1.4). The 120-turn CI
+          # fixture plays for 15 s at 1x, which outlasts the soak.
+          node tools/ci/viewer_smoke.mjs \
+            --bundle dist/static-replay-viewer \
+            --replay "${replay}" \
+            --timeout 90 \
+            --strict-text-bounds \
+            --soak 12
+
+      # -----------------------------------------------------------------
+      # Two more runs against the SAME bundle, through fixtures that
+      # viewer_smoke.mjs opens with --url (its own viewport is fixed at
+      # 1280x800 and it takes no size flag):
+      #
+      #  * 360x640 -- the featured-match iframe on softmax.com is ~360 px wide
+      #    and that is where .plate-name collapses to "…".
+      #  * tools/ci/renderer_fixture.html -- docker_smoke.sh runs with no
+      #    ANTHROPIC_API_KEY, so EVERY replay CI produces carries zero LLM
+      #    text and nothing that plays a replay can draw the feed's speech
+      #    chrome (cogchemists 2026-08-24). The fixture loads the SHIPPED
+      #    index.html in an iframe, shims only the wasm entry, injects a
+      #    full-cap 140-rune note on every seat, and transcribes the page's own
+      #    DOM text runs to a canvas at measured geometry so
+      #    --strict-text-bounds actually measures the shipped chrome.
+      # -----------------------------------------------------------------
+      - name: Stage the fixture server
+        run: |
+          set -euo pipefail
+          rm -rf dist/serve
+          mkdir -p dist/serve
+          cp -r dist/static-replay-viewer/. dist/serve/
+          cp "${REPLAY}" dist/serve/smoke.replay
+          cp tools/ci/renderer_fixture.html tools/ci/narrow_fixture.html dist/serve/
+          (cd dist/serve && nohup python3 -m http.server 8731 >/tmp/serve.log 2>&1 &)
+          for i in $(seq 1 40); do
+            if curl -fsS "http://127.0.0.1:8731/index.html" >/dev/null 2>&1; then break; fi
+            sleep 0.5
+          done
+          curl -fsS "http://127.0.0.1:8731/index.html" >/dev/null
+
+      - name: Load the bundle at 360x640 (the featured-match width)
+        run: |
+          set -euo pipefail
+          node tools/ci/viewer_smoke.mjs \
+            --url "http://127.0.0.1:8731/narrow_fixture.html?replay=%2Fsmoke.replay" \
+            --timeout 90 \
+            --strict-text-bounds \
+            --out dist/narrow
+
+      - name: Drive the shipped text path (renderer fixture, three canvas sizes)
+        run: |
+          set -euo pipefail
+          node tools/ci/viewer_smoke.mjs \
+            --url "http://127.0.0.1:8731/renderer_fixture.html?replay=%2Fsmoke.replay" \
+            --timeout 90 \
+            --strict-text-bounds \
+            --out dist/fixture
+
+      - name: Upload the viewer smoke evidence
+        # Always: the screenshot and the JSON are most useful when the job is red.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewer-smoke
+          path: |
+            viewer-smoke.png
+            viewer-smoke.json
+            dist/narrow
+            dist/fixture
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-replay-viewer
+          path: dist/static-replay-viewer
+          if-no-files-found: error
+          retention-days: 14

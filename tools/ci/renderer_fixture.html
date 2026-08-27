@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>cogame-halite renderer fixture — worst-case LLM text</title>
+<!--
+  Why this file exists (cogchemists, 2026-08-24): tools/ci/docker_smoke.sh runs
+  with NO ANTHROPIC_API_KEY, so every seat plays the scripted baseline and the
+  replay CI produces carries ZERO LLM text. Nothing that plays that replay can
+  draw the feed's speech chrome, so a note anchored where there is no room --
+  drawn at a negative coordinate, clipped to a sliver -- passes every other
+  gate. This fixture is the only one that exercises it.
+
+  Why it loads the SHIPPED page (particle-worlds, 2026-08-26): a fixture that
+  re-implements the drawing proves nothing about the bundle. This one loads
+  dist/static-replay-viewer/index.html in an iframe with `?shim=1` -- the ONLY
+  thing shimmed is the wasm entry, so the page's own chrome, CSS and text path
+  run unchanged -- feeds it a replay whose every seat carries a FULL-CAP
+  140-rune note on many turns, and then TRANSCRIBES the page's own DOM text
+  runs onto a canvas at the measured geometry, so viewer_smoke.mjs's
+  fillText hook measures the real, shipped layout at THREE canvas sizes.
+
+  Run (see .github/workflows/ci.yml):
+    node tools/ci/viewer_smoke.mjs --url \
+      "http://127.0.0.1:8731/renderer_fixture.html?replay=%2Fsmoke.replay" \
+      --timeout 90 --strict-text-bounds
+-->
+<style>
+  html, body { margin: 0; padding: 0; background: #0b0805; color: #f2e8d8;
+               font: 12px/1.4 ui-monospace, Menlo, monospace; }
+  #frame-box { border: 0; display: block; }
+  #sizes { position: fixed; left: 0; bottom: 0; opacity: 0.9; }
+  canvas { display: block; }
+  #mirror { position: fixed; right: 0; top: 0; padding: 6px; }
+  #mirror div { max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+<iframe id="frame-box" width="1240" height="700" title="cogame-halite replay chrome"></iframe>
+<div id="sizes"></div>
+<div id="mirror">
+  <div id="clock"></div>
+  <div id="tick-clock"></div>
+  <div id="scorebug"></div>
+  <div id="status"></div>
+</div>
+<script>
+(function () {
+  'use strict';
+
+  // A 140-rune note, exactly the server's cap (defaults.MAX_NOTE_RUNES). The
+  // 4-byte emoji are there because the server truncates on RUNE boundaries and
+  // a byte-boundary bug would surface here as mojibake, not as a crash.
+  var CAP = 140;
+  function fullCapNote(alias) {
+    var body = alias + ' squeezing the north cluster, hulls light, coming home before anyone heavier can reach us \uD83D\uDEA2\uD83E\uDDC2 and razing the far yard next ';
+    while (Array.from(body).length < CAP) body += 'x';
+    return Array.from(body).slice(0, CAP).join('');
+  }
+
+  var mirrorIds = ['clock', 'tick-clock', 'scorebug', 'status'];
+  var frame = document.getElementById('frame-box');
+  var sizes = [[1240, 700], [900, 560], [360, 640]];
+  var sizeIndex = 0;
+  var canvases = [];
+  var failed = false;
+
+  function fail(message) {
+    if (failed) return;
+    failed = true;
+    document.documentElement.setAttribute('data-replay-error', String(message));
+  }
+
+  sizes.forEach(function (wh) {
+    var canvas = document.createElement('canvas');
+    canvas.width = wh[0];
+    canvas.height = wh[1];
+    canvas.style.width = '120px';
+    canvas.style.height = Math.round(120 * wh[1] / wh[0]) + 'px';
+    document.getElementById('sizes').appendChild(canvas);
+    canvases.push(canvas);
+  });
+
+  function textNodesOf(doc) {
+    // Every LEAF element that carries visible text: the feed rows (the LLM
+    // notes), the scorebug plates, the clock and the endcard.
+    var out = [];
+    var roots = doc.querySelectorAll(
+      '#killfeed *, #scorebug *, #clock *, #endcard *, #transport .tick-clock');
+    for (var i = 0; i < roots.length; i++) {
+      var el = roots[i];
+      if (el.children.length) continue;
+      var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text) continue;
+      out.push({ el: el, text: text });
+    }
+    return out;
+  }
+
+  // Transcribe the page's own text runs onto the canvas at MEASURED geometry.
+  // A run laid out at a negative coordinate, or past the frame, lands outside
+  // the canvas and viewer_smoke.mjs's --strict-text-bounds fails the job.
+  function transcribe(doc, canvas) {
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#f2e8d8';
+    ctx.textBaseline = 'alphabetic';
+    var frameRect = frame.getBoundingClientRect();
+    var scaleX = canvas.width / Math.max(1, frameRect.width);
+    var scaleY = canvas.height / Math.max(1, frameRect.height);
+    var runs = textNodesOf(doc);
+    var drawn = 0;
+    runs.forEach(function (run) {
+      var box = run.el.getBoundingClientRect();
+      if (!box.width && !box.height) return;
+      var style = doc.defaultView.getComputedStyle(run.el);
+      var px = parseFloat(style.fontSize) || 12;
+      ctx.font = Math.max(6, px * scaleY) + 'px ' + (style.fontFamily || 'sans-serif');
+      ctx.fillText(run.text, box.left * scaleX, box.bottom * scaleY);
+      drawn++;
+    });
+    return drawn;
+  }
+
+  function injectNotes(doc) {
+    // Every seat gets a FULL-CAP note on many turns, so the feed is never
+    // empty at whatever turn the fixture samples.
+    var aliases = doc.aliases || [];
+    var stride = Math.max(1, Math.floor(doc.turns.length / 12));
+    doc.turns.forEach(function (rec, index) {
+      if (index % stride !== 0) return;
+      rec.events = rec.events || [];
+      for (var seat = 0; seat < aliases.length; seat++) {
+        rec.events.push({
+          k: 'note', seat: seat, source: 'llm', latencyMs: 1234,
+          text: fullCapNote(aliases[seat])
+        });
+      }
+    });
+    return doc;
+  }
+
+  var replayParam = new URLSearchParams(location.search).get('replay') || '/smoke.replay';
+  fetch(replayParam, { credentials: 'omit' })
+    .then(function (response) {
+      if (!response.ok) throw new Error('replay fetch returned HTTP ' + response.status);
+      return response.text();
+    })
+    .then(function (text) {
+      var doc = injectNotes(JSON.parse(text));
+      for (var i = 0; i < doc.turns.length; i++) {
+        var events = doc.turns[i].events || [];
+        for (var j = 0; j < events.length; j++) {
+          if (events[j].k === 'note' && Array.from(events[j].text).length !== CAP) {
+            throw new Error('fixture note is not exactly ' + CAP + ' runes');
+          }
+        }
+      }
+      var url = URL.createObjectURL(new Blob([JSON.stringify(doc)], { type: 'application/json' }));
+      frame.src = './index.html?shim=1&replay=' + encodeURIComponent(url);
+    })
+    .catch(function (error) { fail(error && error.message ? error.message : String(error)); });
+
+  var passes = 0;
+  setInterval(function () {
+    if (failed) return;
+    var inner;
+    try { inner = frame.contentDocument; } catch (error) { return; }
+    if (!inner || !inner.documentElement) return;
+    var innerError = inner.documentElement.getAttribute('data-replay-error');
+    if (innerError) { fail('shipped page: ' + innerError); return; }
+    if (inner.documentElement.getAttribute('data-replay-loaded') !== 'true') return;
+
+    mirrorIds.forEach(function (id) {
+      var node = inner.querySelector('#' + id);
+      document.getElementById(id).textContent =
+        node ? (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    });
+
+    // One canvas size per pass, so all three are exercised before the fixture
+    // declares itself loaded.
+    var wh = sizes[sizeIndex];
+    frame.width = wh[0];
+    frame.height = wh[1];
+    var drawn = transcribe(inner, canvases[sizeIndex]);
+    if (drawn === 0) {
+      fail('no text runs found in the shipped chrome at ' + wh[0] + 'x' + wh[1]);
+      return;
+    }
+    sizeIndex++;
+    passes++;
+    if (sizeIndex >= sizes.length) {
+      sizeIndex = 0;
+      if (passes >= sizes.length) {
+        document.documentElement.setAttribute('data-replay-loaded', 'true');
+      }
+    }
+  }, 350);
+})();
+</script>
+</body>
+</html>
