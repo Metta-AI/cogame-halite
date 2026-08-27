@@ -1,0 +1,39 @@
+[project]
+name = "cogame-halite"
+version = "1.0.0"
+description = "Coworld game: a bit-exact port of Kaggle's Halite IV (four fleets, one salt flat, four hundred turns)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.10",
+    "anthropic>=0.40",
+    "numpy>=1.26",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["server/cogame_halite", "players"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["server", ".", "tests"]
+asyncio_mode = "auto"
+markers = [
+    "fidelity: the differential gate against a real kaggle-environments install",
+]
+
+[dependency-groups]
+dev = [
+    "coworld==0.1.43",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+]
+# CI-only. `tests/test_fidelity.py` drives upstream's own make("halite") env in
+# a SUBPROCESS with a clean sys.path (the assembled vendor tree shadows the
+# installed package name), so the real distribution never reaches the image.
+fidelity = [
+    "kaggle-environments==1.32.7",
+]

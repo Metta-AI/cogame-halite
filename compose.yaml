@@ -1,0 +1,13 @@
+# Compose services consumed by `uv run coworld build --project .`.
+#
+# ONE service, named after the coworld: the manifest's image placeholder is
+# derived from the compose service name, so `service halite` gives
+# {{HALITE_IMAGE}}. {{GAME_IMAGE}} is not a thing (the lantern 0.1.0 scar).
+# Game and players ship in one image; the manifest `run` selects the role.
+services:
+  halite:
+    image: coworld-halite:latest
+    platform: linux/amd64
+    build:
+      context: .
+      network: host

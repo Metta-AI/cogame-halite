@@ -1,0 +1,675 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Metta-AI/metta/main/packages/coworld/src/coworld/coworld_manifest_schema.json",
+  "tags": [
+    "halite",
+    "kaggle",
+    "economy",
+    "free-for-all"
+  ],
+  "episode_timeout_minutes": 20,
+  "game": {
+    "name": "halite",
+    "replay_viewer": {
+      "bundle": "static-replay-viewer"
+    },
+    "description": "A bit-exact port of Kaggle's Halite IV (kaggle-environments 1.32.7). Four fleets mine a 21x21 wrap-around board of halite, haul it home to their shipyards and ram each other: when two ships end a turn on the same cell the one carrying LESS survives and takes the other's cargo, and equal cargo kills both. Halite in a hold is worth nothing and is stealable; halite in the bank is worth everything and can never be lost. Mining longer earns more but makes you heavier, and heavy loses every collision. Most banked halite at turn 400 wins. Turn resolution is the vendored upstream code itself, not a re-implementation, and a differential fidelity gate proves it every CI run. Policies issue a 20-turn fleet directive; a deterministic micro layer moves every ship.",
+    "owner": "daveey@softmax.com",
+    "runnable": {
+      "type": "game",
+      "image": "{{HALITE_IMAGE}}",
+      "run": [
+        "python",
+        "-m",
+        "cogame_halite.server"
+      ],
+      "source_url": "https://github.com/Metta-AI/cogame-halite/tree/main",
+      "resources": {
+        "requests": {
+          "cpu": "1",
+          "memory": "1Gi"
+        }
+      }
+    },
+    "config_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokens",
+        "players",
+        "num_agents"
+      ],
+      "properties": {
+        "tokens": {
+          "description": "One connection token per seat, indexed by seat slot. Injected by the runner; never authored.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "players": {
+          "description": "One player display-name object per seat, indexed by seat slot.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "num_agents": {
+          "description": "Seat count. cogame-halite is a four-seat free-for-all in every variant; the platform ladder reads this to schedule episodes.",
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 4,
+          "default": 4
+        },
+        "seed": {
+          "description": "Board-generation seed. Omitted in every variant so each episode draws a fresh one; always recorded in results and in the replay header.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "episode_steps": {
+          "description": "Turns in the episode, upstream's episodeSteps. Turn 0 is the generated board; Board.next() is applied episode_steps - 1 times.",
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 2000,
+          "default": 400
+        },
+        "starting_halite": {
+          "description": "Board halite at turn 0, upstream's startingHalite (the normalisation target for populate_board).",
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 200000,
+          "default": 24000
+        },
+        "directive_every": {
+          "description": "A seat is asked for a fresh 20-turn directive on turns where turn mod directive_every == 0; every other turn is answered from the compiled plan.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 400,
+          "default": 20
+        },
+        "turn_deadline_ms": {
+          "description": "Shared deadline for the parallel batch on a micro turn.",
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 60000,
+          "default": 400
+        },
+        "directive_deadline_ms": {
+          "description": "Shared deadline for the parallel batch on a directive turn (covers the player's 12 s attempt plus its 5 s retry plus transport).",
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 120000,
+          "default": 18000
+        },
+        "directive_spacing_ms": {
+          "description": "The engine will not open a new directive batch until this long after the previous one opened. Four calls per batch at >= 10 s is 24 req/min, under the Bedrock sidecar's 30 req/min per-episode cap.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120000,
+          "default": 10000
+        },
+        "player_connect_timeout_seconds": {
+          "description": "Lobby bound. A seat that never connects plays the server-side tidewalker fallback; it never stops the clock.",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 900,
+          "default": 120
+        },
+        "wall_clock_budget_seconds": {
+          "description": "Hard stop at a turn boundary -> results.reason = \"deadline\", settled by the same scoring ladder. 55% of the assumed 1200 s episode timeout.",
+          "type": "number",
+          "minimum": 5,
+          "maximum": 3600,
+          "default": 660
+        },
+        "budget_guard_seconds": {
+          "description": "Past this the engine stops asking players anything and every seat plays the in-process tidewalker compile, so the episode still ends complete. Must be below wall_clock_budget_seconds.",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 3600,
+          "default": 600
+        },
+        "size": {
+          "description": "Board edge. PINNED to upstream's default 21.",
+          "type": "integer",
+          "minimum": 21,
+          "maximum": 21,
+          "default": 21
+        },
+        "spawn_cost": {
+          "description": "PINNED to upstream's default 500.",
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 500,
+          "default": 500
+        },
+        "convert_cost": {
+          "description": "PINNED to upstream's default 500.",
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 500,
+          "default": 500
+        },
+        "move_cost": {
+          "description": "PINNED to upstream's default 0.0.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0,
+          "default": 0.0
+        },
+        "collect_rate": {
+          "description": "PINNED to upstream's default 0.25.",
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 0.25,
+          "default": 0.25
+        },
+        "regen_rate": {
+          "description": "PINNED to upstream's default 0.02.",
+          "type": "number",
+          "minimum": 0.02,
+          "maximum": 0.02,
+          "default": 0.02
+        },
+        "max_cell_halite": {
+          "description": "PINNED to upstream's default 500.",
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 500,
+          "default": 500
+        }
+      }
+    },
+    "results_schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "names",
+        "aliases",
+        "scores",
+        "placement",
+        "ranking",
+        "win",
+        "winner",
+        "reason",
+        "end_rule",
+        "final_turn",
+        "seed",
+        "banked",
+        "ships",
+        "yards",
+        "mined",
+        "stolen",
+        "collisions_won",
+        "collisions_lost",
+        "eliminated_turn",
+        "llm_turns",
+        "fallbacks",
+        "dead_seats",
+        "stop_detail"
+      ],
+      "properties": {
+        "names": {
+          "description": "Real policy names, seat order (spectator side only).",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          }
+        },
+        "aliases": {
+          "description": "FLEET-ALPHA .. FLEET-DELTA, seat order.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          }
+        },
+        "scores": {
+          "description": "Banked halite, or eliminated_turn - episode_steps - 1 when eliminated. Higher is better.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "placement": {
+          "description": "1..4 with the tie-break ladder; equal seats share the higher number.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "ranking": {
+          "description": "Strict seat order, ladder rule 4 (seat index) applied.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "win": {
+          "description": "placement == 1.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "winner": {
+          "description": "The single seat with placement == 1, or null when two or more share it.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Closed enum.",
+          "type": "string",
+          "enum": [
+            "complete",
+            "deadline",
+            "fault"
+          ]
+        },
+        "end_rule": {
+          "description": "Which end condition fired.",
+          "type": "string",
+          "enum": [
+            "full_time",
+            "last_fleet",
+            "wall_clock",
+            "fault"
+          ]
+        },
+        "final_turn": {
+          "description": "The last recorded turn.",
+          "type": "integer"
+        },
+        "seed": {
+          "description": "The episode seed (recorded so the replay re-derives).",
+          "type": "integer"
+        },
+        "banked": {
+          "description": "Final bank per seat.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "ships": {
+          "description": "Ships alive at the end.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "yards": {
+          "description": "Shipyards alive at the end.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "mined": {
+          "description": "Lifetime halite scraped.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "stolen": {
+          "description": "Lifetime halite taken in collisions.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "collisions_won": {
+          "description": "Collisions this seat's ship survived.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "collisions_lost": {
+          "description": "Collisions this seat lost a ship in.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "eliminated_turn": {
+          "description": "The turn the seat was eliminated, or null.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "llm_turns": {
+          "description": "Turns answered with source llm|retry.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "fallbacks": {
+          "description": "Server-side substitutions, partitioned by cause.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "timeout",
+              "malformed",
+              "wrong_turn",
+              "disconnected",
+              "host_error"
+            ],
+            "properties": {
+              "timeout": {
+                "type": "integer"
+              },
+              "malformed": {
+                "type": "integer"
+              },
+              "wrong_turn": {
+                "type": "integer"
+              },
+              "disconnected": {
+                "type": "integer"
+              },
+              "host_error": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "dead_seats": {
+          "description": "Strike-rule flag at the end.",
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "stop_detail": {
+          "description": "Empty, or the fault text (<= 200 runes).",
+          "type": "string"
+        }
+      }
+    },
+    "protocols": {
+      "player": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-halite/blob/main/docs/PROTOCOL.md"
+      },
+      "global": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-halite/blob/main/docs/PROTOCOL.md"
+      }
+    },
+    "docs": {
+      "readme": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-halite/blob/main/README.md"
+      },
+      "pages": [
+        {
+          "id": "rules.md",
+          "title": "Rules & bit-exactness",
+          "content": {
+            "type": "uri",
+            "value": "https://github.com/Metta-AI/cogame-halite/blob/main/docs/RULES.md"
+          }
+        },
+        {
+          "id": "replay.md",
+          "title": "Replay format",
+          "content": {
+            "type": "uri",
+            "value": "https://github.com/Metta-AI/cogame-halite/blob/main/docs/REPLAY.md"
+          }
+        }
+      ]
+    }
+  },
+  "player": [
+    {
+      "id": "tidewalker",
+      "type": "player",
+      "name": "tidewalker",
+      "description": "The published scripted baseline and the executor of every LLM directive: mine the richest cell nearby, come home when full, never end a turn beside a lighter enemy.",
+      "image": "{{HALITE_IMAGE}}",
+      "run": [
+        "python",
+        "-m",
+        "players.halite_player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "tidewalker"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-halite/tree/main/players",
+      "resources": {
+        "requests": {
+          "cpu": "250m",
+          "memory": "256Mi"
+        },
+        "limits": {
+          "cpu": "1"
+        }
+      }
+    },
+    {
+      "id": "corsair",
+      "type": "player",
+      "name": "corsair",
+      "description": "The raider baseline: light hulls, a lower return threshold and hunting always on, so the cargo-theft collision rule is exercised in every episode including the all-scripted CI smoke.",
+      "image": "{{HALITE_IMAGE}}",
+      "run": [
+        "python",
+        "-m",
+        "players.halite_player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "corsair"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-halite/tree/main/players",
+      "resources": {
+        "requests": {
+          "cpu": "250m",
+          "memory": "256Mi"
+        },
+        "limits": {
+          "cpu": "1"
+        }
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "standard",
+      "name": "Standard (400 turns)",
+      "description": "The full Halite IV episode: 21x21 torus, 24000 halite, four fleets, 400 turns, a fresh LLM directive every 20 turns.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Fleet A"
+          },
+          {
+            "name": "Fleet B"
+          },
+          {
+            "name": "Fleet C"
+          },
+          {
+            "name": "Fleet D"
+          }
+        ],
+        "num_agents": 4,
+        "episode_steps": 400,
+        "starting_halite": 24000,
+        "directive_every": 20,
+        "turn_deadline_ms": 400,
+        "directive_deadline_ms": 18000,
+        "directive_spacing_ms": 10000,
+        "player_connect_timeout_seconds": 120,
+        "wall_clock_budget_seconds": 660,
+        "budget_guard_seconds": 600
+      }
+    },
+    {
+      "id": "sprint",
+      "name": "Sprint (200 turns)",
+      "description": "Same rules, half the episode, a directive every 10 turns. Exists for ladder throughput, not because the budget needs it.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Fleet A"
+          },
+          {
+            "name": "Fleet B"
+          },
+          {
+            "name": "Fleet C"
+          },
+          {
+            "name": "Fleet D"
+          }
+        ],
+        "num_agents": 4,
+        "episode_steps": 200,
+        "starting_halite": 24000,
+        "directive_every": 10,
+        "turn_deadline_ms": 400,
+        "directive_deadline_ms": 18000,
+        "directive_spacing_ms": 10000,
+        "player_connect_timeout_seconds": 120,
+        "wall_clock_budget_seconds": 660,
+        "budget_guard_seconds": 600
+      }
+    },
+    {
+      "id": "richfields",
+      "name": "Rich fields",
+      "description": "A denser board (32000 halite at turn 0), so more cells are worth contesting and the collision rule bites harder. Rules identical.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Fleet A"
+          },
+          {
+            "name": "Fleet B"
+          },
+          {
+            "name": "Fleet C"
+          },
+          {
+            "name": "Fleet D"
+          }
+        ],
+        "num_agents": 4,
+        "episode_steps": 400,
+        "starting_halite": 32000,
+        "directive_every": 20,
+        "turn_deadline_ms": 400,
+        "directive_deadline_ms": 18000,
+        "directive_spacing_ms": 10000,
+        "player_connect_timeout_seconds": 120,
+        "wall_clock_budget_seconds": 660,
+        "budget_guard_seconds": 600
+      }
+    }
+  ],
+  "certification": {
+    "players": [
+      {
+        "player_id": "tidewalker"
+      },
+      {
+        "player_id": "corsair"
+      },
+      {
+        "player_id": "tidewalker"
+      },
+      {
+        "player_id": "corsair"
+      }
+    ],
+    "game_config": {
+      "players": [
+        {
+          "name": "Tidewalker A"
+        },
+        {
+          "name": "Corsair A"
+        },
+        {
+          "name": "Tidewalker B"
+        },
+        {
+          "name": "Corsair B"
+        }
+      ],
+      "num_agents": 4,
+      "episode_steps": 120,
+      "seed": 42,
+      "starting_halite": 24000,
+      "directive_every": 20,
+      "turn_deadline_ms": 400,
+      "directive_deadline_ms": 18000,
+      "directive_spacing_ms": 0,
+      "player_connect_timeout_seconds": 60,
+      "wall_clock_budget_seconds": 300,
+      "budget_guard_seconds": 240
+    }
+  }
+}
