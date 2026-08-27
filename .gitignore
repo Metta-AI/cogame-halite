@@ -1,0 +1,13 @@
+build/
+dist/
+viewer/dist/
+replay-viewer/dist/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+tmp/
+node_modules/
+viewer-smoke.png
+viewer-smoke.json
+nim.cfg
