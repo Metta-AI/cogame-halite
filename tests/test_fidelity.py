@@ -8,7 +8,8 @@ What it proves, against a real ``kaggle-environments==1.32.7`` install:
 * **8 seeds x 399 turns** of exact-equality differential comparison — the
   441-entry ``halite`` list element for element (exact floats), every player's
   ``[bank, shipyards, ships]`` **including dict insertion order**, ``step``,
-  and each agent's ``status``/``reward``.
+  and each agent's ``status``/``reward`` **at every turn**, not just at the
+  end.
 * **50 seeds** of board generation, cell for cell, with the four starting
   positions exactly ``[110, 120, 320, 330]``.
 * **3 seeds x 399 turns** of the same comparison over a stream that
@@ -159,6 +160,29 @@ def _assert_identical(seed: int, ours: list[dict], theirs: list[dict]) -> None:
             assert list(a[2].items()) == list(b[2].items()), (
                 f"seed {seed} turn {turn} seat {seat}: ships (or their order) diverged"
             )
+        # Each agent's status and reward, AT EVERY TURN (design note §fidelity
+        # gate, docs/RULES.md). Comparing only the final state cannot see a
+        # seat that goes DONE at the wrong turn or a frozen elimination reward.
+        # Upstream: an eliminated agent is DONE with
+        # `reward = step - episodeSteps - 1`; an active agent's reward is its
+        # bank; and at the last step core marks every remaining agent DONE.
+        last = mine["step"] >= defaults.EPISODE_STEPS - 1
+        for seat, eliminated in enumerate(mine["eliminated"]):
+            expected_status = "DONE" if (eliminated is not None or last) else "ACTIVE"
+            assert up["status"][seat] == expected_status, (
+                f"seed {seed} turn {turn} seat {seat}: upstream status "
+                f"{up['status'][seat]!r}, ours implies {expected_status!r} "
+                f"(eliminated={eliminated})"
+            )
+            expected_reward = (
+                mine["players"][seat][0]
+                if eliminated is None
+                else eliminated - defaults.EPISODE_STEPS - 1
+            )
+            assert up["reward"][seat] == expected_reward, (
+                f"seed {seed} turn {turn} seat {seat}: upstream reward "
+                f"{up['reward'][seat]}, ours implies {expected_reward}"
+            )
 
 
 @requires_upstream
@@ -171,19 +195,11 @@ def test_differential_episode(seed: int):
         f"seed {seed}: upstream stopped after {len(theirs) - 1} turns — the order "
         "stream must keep every seat alive so the gate compares the full episode"
     )
+    # Statuses and rewards are compared inside _assert_identical, at every
+    # turn; this stream additionally keeps every seat alive throughout.
     _assert_identical(seed, ours, theirs)
-
-    # Statuses and rewards, too. With no seat eliminated every agent is ACTIVE
-    # until the env itself runs out of steps.
-    final = theirs[-1]
-    sim = HaliteSim(make_config(seed=seed, episode_steps=defaults.EPISODE_STEPS))
-    sim.reset()
-    for orders in stream:
-        sim.step(orders)
-    assert sim.eliminated == [None] * defaults.NUM_SEATS
-    assert final["reward"] == sim.banks(), (
-        f"seed {seed}: upstream rewards {final['reward']} != our banks {sim.banks()}"
-    )
+    assert ours[-1]["eliminated"] == [None] * defaults.NUM_SEATS
+    assert theirs[-1]["reward"] == [p[0] for p in ours[-1]["players"]]
 
 
 @requires_upstream
