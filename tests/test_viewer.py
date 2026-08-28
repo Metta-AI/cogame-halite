@@ -363,3 +363,15 @@ def test_the_shipped_page_boots_plays_and_draws_under_a_dom_stub(tmp_path):
     assert report["beats"] >= 5
     assert report["feed_lines"] > 0
     assert report["startedBytes"] == fixture.stat().st_size
+
+
+def test_ci_gates_the_renderer_fixture_on_a_non_vacuous_text_count():
+    """viewer_smoke.mjs accepts the bridge `ready` OR data-replay-loaded,
+    whichever comes first; the shipped page inside the fixture's iframe posts
+    `ready` within ~300 ms, before the fixture has transcribed anything. The
+    soak keeps the page alive for the three passes and this assertion is what
+    makes the text gate mean something (cogchemists 2026-08-24)."""
+    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
+    assert "--soak 8" in ci
+    assert 'text["total"] < 12' in ci
+    assert 'text["never_inside"]' in ci

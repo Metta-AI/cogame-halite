@@ -281,16 +281,41 @@ jobs:
             --url "http://127.0.0.1:8731/narrow_fixture.html?replay=%2Fsmoke.replay" \
             --timeout 90 \
             --strict-text-bounds \
+            --soak 8 \
             --out dist/narrow
 
       - name: Drive the shipped text path (renderer fixture, three canvas sizes)
         run: |
           set -euo pipefail
+          # --soak 8 is load-bearing: viewer_smoke.mjs accepts the bridge
+          # `ready` OR data-replay-loaded, whichever comes first, and the
+          # shipped page inside the fixture's iframe posts `ready` within
+          # ~300 ms -- before the fixture has transcribed a single run. Without
+          # it the text gate measured nothing (canvas_text.total == 0).
           node tools/ci/viewer_smoke.mjs \
             --url "http://127.0.0.1:8731/renderer_fixture.html?replay=%2Fsmoke.replay" \
             --timeout 90 \
             --strict-text-bounds \
+            --soak 8 \
             --out dist/fixture
+
+      - name: Assert the renderer fixture actually measured the shipped text
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib
+          report = json.loads(pathlib.Path("dist/fixture/viewer-smoke.json").read_text())
+          text = report["canvas_text"]
+          if text["total"] < 12:
+              raise SystemExit(
+                  "the renderer fixture drew only "
+                  f"{text['total']} text runs -- --strict-text-bounds measured "
+                  "nothing, so the gate is vacuous (cogchemists 2026-08-24)")
+          if text["never_inside"]:
+              raise SystemExit(f"strings never drawn inside the canvas: {text['never_inside_samples']}")
+          print(f"renderer fixture: {text['total']} text runs measured, "
+                f"{text['outside']} crossed an edge, {text['never_inside']} never inside")
+          PY
 
       - name: Upload the viewer smoke evidence
         # Always: the screenshot and the JSON are most useful when the job is red.

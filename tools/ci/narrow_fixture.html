@@ -15,7 +15,7 @@
   Run (see .github/workflows/ci.yml):
     node tools/ci/viewer_smoke.mjs --url \
       "http://127.0.0.1:8731/narrow_fixture.html?replay=%2Fsmoke.replay" \
-      --timeout 90 --strict-text-bounds
+      --timeout 90 --strict-text-bounds --soak 8 --out dist/narrow
 -->
 <style>
   html, body { margin: 0; padding: 0; background: #0b0805; color: #f2e8d8;

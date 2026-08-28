@@ -23,7 +23,15 @@
   Run (see .github/workflows/ci.yml):
     node tools/ci/viewer_smoke.mjs --url \
       "http://127.0.0.1:8731/renderer_fixture.html?replay=%2Fsmoke.replay" \
-      --timeout 90 --strict-text-bounds
+      --timeout 90 --strict-text-bounds --soak 8 --out dist/fixture
+
+  The soak is NOT decoration here. viewer_smoke.mjs accepts the bridge `ready`
+  postMessage OR data-replay-loaded, whichever comes FIRST, and the shipped
+  page inside the iframe posts `ready` within ~300 ms -- before this fixture
+  has transcribed anything. Without the soak the run ended with
+  `canvas_text.total == 0` and the text gate was vacuous. The soak keeps the
+  page alive while the three passes run, and ci.yml then asserts the count is
+  non-zero.
 -->
 <style>
   html, body { margin: 0; padding: 0; background: #0b0805; color: #f2e8d8;
@@ -195,7 +203,7 @@
         document.documentElement.setAttribute('data-replay-loaded', 'true');
       }
     }
-  }, 350);
+  }, 200);
 })();
 </script>
 </body>
