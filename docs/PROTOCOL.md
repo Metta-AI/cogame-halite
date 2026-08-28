@@ -62,14 +62,23 @@ Player containers read `COWORLD_PLAYER_WS_URL` (legacy alias
  "halite":[<441 numbers, index = (size-y-1)*size + x>],
  "players":[[<bank>,{"<yardId>":<pos>},{"<shipId>":[<pos>,<cargo>]}], … four …],
  "player":2,
+ "step":137,
+ "remainingOverageTime":60,
  "eliminated":[null,null,null,312],
  "board":"<21 lines of the vendored Board.__str__>",
  "budget":{"elapsedMs":41230,"wallClockBudgetMs":660000}}
 ```
 
-* **`halite`, `players`, `player` and the turn index are Kaggle's own
-  `observation` object, key for key**, so a Kaggle bot's `Board(obs, config)`
-  works unchanged. Everything else sits alongside it, never inside it.
+* **`halite`, `players`, `player`, `step` and `remainingOverageTime` are
+  Kaggle's own `observation` object, key for key**, so a Kaggle bot's
+  `Board(obs, config)` works unchanged **on this frame** —
+  `kaggle_environments.helpers.Observation` reads `step` and
+  `remainingOverageTime`, and `Board.__init__` reads both.
+  `tests/test_engine.py` builds a `Board` from a real wire frame with the
+  vendored helpers so the claim cannot rot. `turn` is our own spelling of
+  `step` and always equals it; `remainingOverageTime` is always the config
+  default (60) because our pacing is the engine's deadlines. Everything else
+  sits alongside the Kaggle keys, never inside them.
 * **Asset ordering is part of the contract**: `players[p][1]` and
   `players[p][2]` are serialised in upstream's insertion order, and that is the
   order spawns and converts are processed in.

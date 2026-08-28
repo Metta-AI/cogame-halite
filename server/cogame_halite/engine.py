@@ -126,6 +126,15 @@ class Engine:
             "halite": obs["halite"],
             "players": obs["players"],
             "player": seat,
+            # Kaggle's observation object, key for key, so a leaderboard bot's
+            # `Board(obs, config)` works unchanged on this frame: `Board` reads
+            # `step` and `remainingOverageTime` through
+            # `helpers.Observation`, and `turn` is our own spelling of `step`.
+            # `remainingOverageTime` is always the config default here (the
+            # design note's §Out of scope: our pacing is the engine's
+            # deadlines, the field is present for shape compatibility).
+            "step": obs["step"],
+            "remainingOverageTime": obs["remainingOverageTime"],
             "eliminated": list(self.sim.eliminated),
             "board": self.sim.ascii_board(),
             "budget": {

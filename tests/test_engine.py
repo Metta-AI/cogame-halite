@@ -4,6 +4,7 @@ the strike rule, the budget guard and the hard stop."""
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from pathlib import Path
 
@@ -358,3 +359,51 @@ async def test_a_sim_fault_is_an_outcome_not_a_crash(monkeypatch):
     assert "negative" in outcome.results["stop_detail"]
     assert len(outcome.results["stop_detail"]) <= defaults.MAX_STOP_DETAIL_RUNES
     assert outcome.replay.turns, "artifacts are still written on a fault"
+
+
+# ------------------------------------------- the frame is Kaggle's observation
+class RecordingLink(FakeLink):
+    """A seat link that keeps every frame the engine wrote to it."""
+
+    def __init__(self, seat: int, **kwargs):
+        super().__init__(seat, **kwargs)
+        self.frames: list[dict] = []
+
+    async def send(self, message: dict) -> None:
+        self.frames.append(json.loads(json.dumps(message)))
+        await super().send(message)
+
+
+async def test_a_kaggle_bots_board_builds_from_the_wire_frame_unchanged():
+    """`docs/PROTOCOL.md`: "a Kaggle bot's `Board(obs, config)` works
+    unchanged". `Board.__init__` reads `observation.step` and
+    `observation.remaining_overage_time`, so a frame without `step` and
+    `remainingOverageTime` raises `KeyError('step')` — and the hundreds of open
+    leaderboard bots the design note points at are not portable after all.
+
+    This drives a real episode, takes the bytes the engine actually wrote to a
+    seat's socket, and builds a board out of them with the VENDORED helpers."""
+    from cogame_halite.sim import Board  # the vendored class, not a re-write
+
+    cfg = make_config(episode_steps=6)
+    seats = [RecordingLink(seat) for seat in range(4)]
+    engine = Engine(cfg, seats, sleep=nosleep)
+    await engine.run()
+
+    frames = seats[2].frames
+    assert frames, "the seat received no observe frame"
+    for frame in frames:
+        assert frame["step"] == frame["turn"], "`turn` is our spelling of `step`"
+        assert frame["remainingOverageTime"] == (
+            defaults.upstream_spec()["observation"]["remainingOverageTime"]
+        )
+        board = Board(frame, cfg.upstream_configuration())
+        assert board.step == frame["turn"]
+        assert board.current_player_id == 2
+        assert len(board.players) == 4
+        assert len(board.cells) == cfg.size * cfg.size
+        for seat, (bank, yards, ships) in enumerate(frame["players"]):
+            player = board.players[seat]
+            assert player.halite == bank
+            assert sorted(s.id for s in player.ships) == sorted(ships)
+            assert sorted(y.id for y in player.shipyards) == sorted(yards)
