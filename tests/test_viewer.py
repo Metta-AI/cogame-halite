@@ -319,3 +319,47 @@ def test_the_built_bundle_parses_the_ci_replay_under_node(tmp_path):
     )
     out = subprocess.run(["node", str(script)], capture_output=True, text=True, check=True)
     assert json.loads(out.stdout)["turns"] > 0
+
+
+# ------------------------------------------- the page's own logic, under node
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_the_shipped_page_boots_plays_and_draws_under_a_dom_stub(tmp_path):
+    """The sandbox has no browser and CI's wasm-viewer job is the real gate,
+    but a stub run catches what that gate cannot report cheaply: a throw in the
+    boot path, a scorebug that never builds, a scrubber with no beats, or
+    playback that does not advance. Only the wasm half is stubbed; the chrome
+    and the page's own block are the shipped code."""
+    import asyncio
+
+    from conftest import FakeLink, make_config
+    from cogame_halite.engine import Engine
+
+    async def nosleep(_seconds):
+        return None
+
+    async def episode():
+        engine = Engine(
+            make_config(episode_steps=120),
+            [FakeLink(i, baseline=("tidewalker", "corsair")[i % 2],
+                      note="squeezing BRAVO off the north cluster \U0001F6A2")
+             for i in range(4)],
+            sleep=nosleep,
+        )
+        return await engine.run()
+
+    outcome = asyncio.get_event_loop_policy().new_event_loop().run_until_complete(episode())
+    fixture = tmp_path / "page.replay"
+    fixture.write_bytes(outcome.replay.to_bytes())
+
+    result = subprocess.run(
+        ["node", str(REPO / "tests" / "page_dom_harness.mjs"), str(REPO), str(fixture)],
+        capture_output=True, text=True, timeout=180,
+    )
+    assert result.returncode == 0, (
+        f"the shipped page failed under the DOM stub:\n{result.stdout}\n{result.stderr}"
+    )
+    report = json.loads(result.stdout)
+    assert report["plates"] == 4
+    assert report["beats"] >= 5
+    assert report["feed_lines"] > 0
+    assert report["startedBytes"] == fixture.stat().st_size

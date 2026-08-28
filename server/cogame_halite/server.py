@@ -142,7 +142,11 @@ class GameServer:
             WsSeat(i, p.name) for i, p in enumerate(config.players)
         ]
         self.results_doc: dict | None = None
-        self._all_connected = asyncio.Event()
+        # The lobby is over when every seat has BOTH connected AND registered.
+        # Waiting only for the sockets races the register packet: a seat that
+        # reconnects a second late lands its `register` after the check and is
+        # then wrongly reported as unregistered.
+        self._lobby_ready = asyncio.Event()
         self._global_wss: set[web.WebSocketResponse] = set()
         self._failure_reported = False
         self._last_turn = 0
@@ -235,8 +239,7 @@ class GameServer:
                 }
             )
         )
-        if all(s.connected for s in self.seats):
-            self._all_connected.set()
+        self._check_lobby()
         try:
             async for msg in ws:
                 if msg.type != WSMsgType.TEXT:
@@ -257,6 +260,7 @@ class GameServer:
                         f"label={seat.label!r}",
                         file=sys.stderr,
                     )
+                    self._check_lobby()
                     continue
                 seat.deliver(data)
         finally:
@@ -266,13 +270,17 @@ class GameServer:
                 print(f"seat {slot} disconnected", file=sys.stderr)
         return ws
 
+    def _check_lobby(self) -> None:
+        if all(s.connected and s.registered for s in self.seats):
+            self._lobby_ready.set()
+
     # ------------------------------------------------------ the episode
 
     async def run_episode(self) -> EpisodeOutcome:
         cfg = self.config
         with contextlib.suppress(asyncio.TimeoutError, TimeoutError):
             await asyncio.wait_for(
-                self._all_connected.wait(), cfg.player_connect_timeout_seconds
+                self._lobby_ready.wait(), cfg.player_connect_timeout_seconds
             )
         no_shows = [s for s in self.seats if not s.ever_connected]
         for seat in no_shows:
