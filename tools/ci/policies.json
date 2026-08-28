@@ -1,7 +1,0 @@
-[{"name":"halite-tidereader","run":["python","-m","players.halite_player"],
-  "env":{"PLAYER_PROMPT":"Play the bank. Mine the richest cell within three steps, come home before you are the heaviest ship on the board, and never let a loaded ship end a turn next to a lighter enemy. Build a second shipyard early on the far side of your quadrant.","USE_BEDROCK":"true"}},
- {"name":"halite-privateer","run":["python","-m","players.halite_player"],
-  "env":{"PLAYER_PROMPT":"Play the collision rule. Keep your hulls light and hunt loaded enemy ships near their shipyards; take the cargo instead of mining it. Spawn aggressively while halite is cheap and raze an undefended enemy yard when the trade is even.","USE_BEDROCK":"true"},
-  "player":"ply_bac48eb1-662e-44f8-973d-f3e016dccf5d"},
- {"name":"halite-tidewalker","run":["python","-m","players.halite_player"],"env":{"PLAYER_SCRIPTED":"tidewalker"}},
- {"name":"halite-corsair","run":["python","-m","players.halite_player"],"env":{"PLAYER_SCRIPTED":"corsair"}}]
