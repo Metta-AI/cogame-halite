@@ -114,70 +114,40 @@
     canvases.push(canvas);
   });
 
-  // Every VISUAL LINE BOX of every text node in the chrome, with the exact
-  // substring the browser laid out on it. Character-level Range rects are how
-  // a wrapped row is transcribed as the two lines it really is instead of as
-  // one impossible single-line run -- otherwise every wrapped element is a
-  // false positive and the gate is worthless in the other direction.
-  function lineRuns(root) {
+  // One run per LEAF ELEMENT that carries text, at the element's own laid-out
+  // box. Character-level Range rects were tried first and are not sound here:
+  // they hand back geometry that does not agree with the element's box for
+  // right-aligned wrapped rows, which turned every feed line into a phantom
+  // "text with nowhere to go" while the geometry note printed a feed band that
+  // was demonstrably inside the frame. An element box is a browser guarantee,
+  // and it is the thing the gate is actually about -- a caption anchored where
+  // there is no room is an element whose BOX is off-frame (cogchemists
+  // 2026-08-24: a bubble growing upward from a cog at the top of the arena).
+  function elementRuns(root) {
     var doc = root.ownerDocument;
-    var walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    var range = doc.createRange();
+    var css = doc.defaultView.getComputedStyle;
     var out = [];
-    var node;
-    while ((node = walker.nextNode())) {
-      var data = node.data;
-      if (!data || !data.trim()) continue;
-      var style = doc.defaultView.getComputedStyle(node.parentElement);
-      if (style.display === 'none' || style.visibility === 'hidden') continue;
-      // An element that asked for `text-overflow: ellipsis` DRAWS the visible
-      // prefix and an ellipsis; the characters past the clip are laid out but
-      // never painted. Transcribing them would report a defect the viewer does
-      // not have. Everything else is transcribed whole -- a row silently cut
-      // by an overflow:hidden band with no ellipsis IS a defect and stays
-      // visible to the gate.
-      var clip = style.textOverflow === 'ellipsis'
-        ? node.parentElement.getBoundingClientRect()
-        : null;
-      var start = 0;
-      var top = null;
-      var left = 0;
-      var right = 0;
-      var bottom = 0;
-      for (var i = 0; i < data.length; i++) {
-        range.setStart(node, i);
-        range.setEnd(node, i + 1);
-        var box = range.getBoundingClientRect();
-        if (!box.width && !box.height) continue;
-        if (clip && (box.right > clip.right + 1 || box.left < clip.left - 1)) continue;
-        var rowTop = Math.round(box.top);
-        // Trailing whitespace is laid out but never painted, and Chromium lets
-        // it hang past the content box -- it must not extend the run.
-        var ink = data[i].trim().length > 0;
-        if (top === null) {
-          top = rowTop; left = box.left; right = ink ? box.right : box.left;
-          bottom = box.bottom; start = i;
-        } else if (rowTop !== top) {
-          out.push({ text: data.slice(start, i), left: left, right: right, bottom: bottom, style: style });
-          top = rowTop; left = box.left; right = ink ? box.right : box.left;
-          bottom = box.bottom; start = i;
-        } else {
-          if (ink) right = Math.max(right, box.right);
-          bottom = Math.max(bottom, box.bottom);
-        }
-      }
-      if (top !== null) {
-        out.push({ text: data.slice(start), left: left, right: right, bottom: bottom, style: style });
-      }
-    }
+    var nodes = [root].concat(Array.prototype.slice.call(root.querySelectorAll('*')));
+    nodes.forEach(function (el) {
+      if (el.children.length) return;                  // leaves only
+      var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text) return;
+      var style = css(el);
+      if (style.display === 'none' || style.visibility === 'hidden') return;
+      if (parseFloat(style.opacity) === 0) return;
+      var box = el.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      out.push({
+        text: text, left: box.left, right: box.right, bottom: box.bottom, style: style
+      });
+    });
     return out;
   }
 
-  // Transcribe one page's own text runs onto its canvas at MEASURED geometry.
-  // The canvas IS that iframe's layout viewport, read from INSIDE the iframe
-  // (documentElement.clientWidth), because every range rect above is in the
-  // inner coordinate space. A run outside the canvas therefore means the page
-  // genuinely laid that text outside its own frame.
+  // Transcribe one page's own text onto its canvas at MEASURED geometry. The
+  // canvas IS that iframe's layout viewport, read from INSIDE the iframe, so a
+  // run outside the canvas means the page genuinely laid that text outside its
+  // own frame.
   function transcribe(doc, canvas) {
     var view = doc.documentElement;
     if (canvas.width !== view.clientWidth || canvas.height !== view.clientHeight) {
@@ -194,15 +164,14 @@
     ['#killfeed', '#scorebug', '#clock', '#endcard', '#transport'].forEach(function (host) {
       var root = doc.querySelector(host);
       if (!root) return;
-      lineRuns(root).forEach(function (run) {
+      elementRuns(root).forEach(function (run) {
         var px = parseFloat(run.style.fontSize) || 12;
         var family = run.style.fontFamily || 'sans-serif';
-        // The canvas must MEASURE the run exactly as the page LAID IT OUT.
-        // The parent document may resolve a different face for the same family
-        // list, and measureText would then overstate every run by 5-20% --
-        // which reads as "text with nowhere to go" for every right-anchored
-        // line in the feed. Scale the font so the drawn width equals the width
-        // the browser actually used.
+        // The canvas must MEASURE the run exactly as wide as the page LAID IT
+        // OUT. The parent document may resolve a different face for the same
+        // family list, and a wrapped element occupies its box rather than one
+        // long line; scaling the font so the drawn width equals the element's
+        // own box width makes the transcription font- and wrap-independent.
         ctx.font = px + 'px ' + family;
         var measured = ctx.measureText(run.text).width || 1;
         var laidOut = Math.max(1, run.right - run.left);
