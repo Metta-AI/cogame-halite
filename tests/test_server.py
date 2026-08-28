@@ -124,6 +124,9 @@ async def test_global_answers_a_ping(server):
 def test_the_shutdown_grace_is_twenty_seconds():
     assert SHUTDOWN_GRACE_SECONDS >= 20.0
     source = (REPO / "server" / "cogame_halite" / "server.py").read_text()
+    assert "await asyncio.sleep(SHUTDOWN_GRACE_SECONDS)" in source, (
+        "the constant is not the contract: the server must AWAIT the grace"
+    )
     assert 'add_get("/client/replay' not in source, "no /client/replay route"
     assert "add_static" not in source, "the pod never serves the viewer bundle"
     assert "VIEWER_DIST" not in source, "the pod never reaches for viewer/dist"
