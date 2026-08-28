@@ -155,13 +155,17 @@
   // A run laid out at a negative coordinate, or past the frame, lands outside
   // the canvas and viewer_smoke.mjs's --strict-text-bounds fails the job.
   function transcribe(doc, canvas) {
-    // The canvas IS the iframe's own viewport, 1:1. Scaling the transcription
-    // was worth ~5% and turned every right-anchored run into a false positive;
-    // at scale 1 an "outside the canvas" verdict means the page genuinely laid
-    // that text outside its own frame, which is the only thing worth gating.
-    const frameRect = frame.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.round(frameRect.width));
-    canvas.height = Math.max(1, Math.round(frameRect.height));
+    // The canvas IS the iframe's own LAYOUT VIEWPORT, 1:1 -- read from inside
+    // the iframe (documentElement.clientWidth), not from the parent's rect of
+    // the <iframe> element. Those two can disagree, and every range rect this
+    // function measures is in the INNER coordinate space, so sizing the canvas
+    // from the outer rect silently transcribes one layout into another
+    // layout's frame and reports the difference as text with nowhere to go.
+    // At 1:1 in the right space, "outside the canvas" means the page genuinely
+    // laid that text outside its own frame -- the only thing worth gating.
+    const view = doc.documentElement;
+    canvas.width = Math.max(1, view.clientWidth);
+    canvas.height = Math.max(1, view.clientHeight);
     canvas.style.width = '120px';
     canvas.style.height = Math.round(120 * canvas.height / canvas.width) + 'px';
     const ctx = canvas.getContext('2d');
