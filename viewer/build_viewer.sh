@@ -74,8 +74,9 @@ grep -q '_halite_stage_ptr' "$DIST"/halite_replay.js
 grep -q "get('replay')" "$DIST"/index.html
 ! grep -q '<script src="./broadcast_core.js"></script>' "$DIST"/index.html
 ! grep -q '<script src="./halite_replay.js"></script>' "$DIST"/index.html
-# Relative asset paths only (the bundle is served under /client/replay/ and
-# from the Observatory's own host).
+# Relative asset paths only (the bundle is served from S3 under
+# /v2/coworlds/replays/static/<cow_id>/<sha>/, never from the Observatory's
+# own host and never from the game pod).
 ! grep -Eq 'src="/[^/]' "$DIST"/index.html
 
 ls -la "$DIST"

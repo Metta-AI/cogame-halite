@@ -18,8 +18,10 @@ Certifier probes this server must answer (each has cost a coworld a release):
   answering pings for a **20 s shutdown grace** after artifacts are written
   (lantern 0.1.3).
 
-Replay mode: when ``COGAME_LOAD_REPLAY_URI`` is set, no episode runs; the
-static viewer bundle and the replay bytes are served for local viewing.
+Replay mode: when ``COGAME_LOAD_REPLAY_URI`` is set, no episode runs and the
+recorded bytes are served at ``GET /replay-data``. The pod never serves a
+viewer: this game declares the static wasm bundle, so there is **no
+``/client/replay`` path anywhere** and the viewer contacts nothing but S3.
 
 Entry point: ``python -m cogame_halite.server``.
 """
@@ -33,8 +35,6 @@ import json
 import os
 import sys
 import time
-from pathlib import Path
-
 from aiohttp import WSMsgType, web
 
 from . import defaults, results as results_mod, uris
@@ -42,9 +42,6 @@ from .config import ConfigError, GameConfig
 from .engine import Engine, EpisodeOutcome
 from .replay import ReplayWriter
 from .version import GAME_VERSION, PROTOCOL
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-VIEWER_DIST = REPO_ROOT / "viewer" / "dist"
 
 #: Process start, taken at import — the earliest instant this container can
 #: observe. Both engine budgets (the 600 s guard and the 660 s hard stop) are
@@ -456,22 +453,29 @@ class GameServer:
 
 
 def _add_replay_routes(app: web.Application, get_bytes) -> None:
+    """`GET /replay-data` — the recorded bytes, and nothing else.
+
+    **There is no `/client/replay` pod path**, and the game pod never serves
+    the viewer bundle. The replay viewer of this game is the static wasm
+    bundle (`game.replay_viewer.bundle = "static-replay-viewer"`), which the
+    platform serves from S3 and which contacts nothing but the replay bytes it
+    is handed. `coworld certify` agrees: a declared static bundle "replaces
+    this legacy route requirement" and the certifier skips the
+    `/client/replay` + `/replay` liveness probe entirely
+    (`coworld/docs/STATIC_REPLAY_VIEWERS.md`, `coworld/cli.py`: "Replay
+    liveness: skipped (static replay bundle declared; /client/replay and
+    /replay not required)"). Locally, point the built bundle at this endpoint:
+
+        dist/static-replay-viewer/index.html?replay=http://localhost:8080/replay-data
+    """
+
     async def handle_replay_data(request: web.Request) -> web.Response:
         data = get_bytes()
         if not data:
             raise web.HTTPNotFound(text="no replay loaded")
         return web.Response(body=data, content_type="application/json")
 
-    async def handle_replay_index(request: web.Request) -> web.Response:
-        index = VIEWER_DIST / "index.html"
-        if not index.is_file():
-            raise web.HTTPNotFound(text="replay viewer bundle is not built")
-        raise web.HTTPFound("/client/replay/index.html?replay=/replay-data")
-
     app.router.add_get("/replay-data", handle_replay_data)
-    app.router.add_get("/client/replay", handle_replay_index)
-    if VIEWER_DIST.is_dir():
-        app.router.add_static("/client/replay/", VIEWER_DIST)
 
 
 def make_replay_app(replay_bytes: bytes) -> web.Application:

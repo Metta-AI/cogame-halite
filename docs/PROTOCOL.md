@@ -22,7 +22,7 @@ Player containers read `COWORLD_PLAYER_WS_URL` (legacy alias
 | `GET /client/global` | A real HTML page for the spectator feed. |
 | `WS /player?slot=&token=` | One seat. **Closed unless the token matches the seat.** One connection per slot. |
 | `WS /global` | Broadcast-only. Emits a first message immediately, answers pings for a 20 s shutdown grace after the artifacts are written. |
-| `GET /replay-data`, `/client/replay/` | Local replay viewing (the static bundle). |
+| `GET /replay-data` | The recorded replay bytes in replay mode. **There is no `/client/replay` path**: the viewer is the static wasm bundle the platform serves from S3, and `coworld certify` skips the legacy `/client/replay` + `/replay` liveness probe when `game.replay_viewer.bundle` is declared. |
 
 ## Message flow
 
