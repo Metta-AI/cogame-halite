@@ -136,7 +136,11 @@ Per seat, per turn, in order — every step bounded:
 4. **Server-side scripted fallback.** A late, malformed, wrong-turn or
    disconnected reply is replaced by the orders `tidewalker` compiles from the
    same state, in-process; a `fallback` event records the cause and the sim
-   steps. **The sim never waits.**
+   steps. **The sim never waits.** The seat's `observe` **write** shares that
+   same turn deadline: a peer that holds its socket open but stops reading it
+   applies flow control back to the server's write, so the half-written frame
+   is cut off at the deadline, the seat counts as `disconnected` (a socket
+   nobody reads is a socket nobody has) and it is not written to again.
 5. **Strike rule.** Ten consecutive substitutions mark the seat dead: it is no
    longer awaited (so it cannot hold up the batch), it keeps playing
    `tidewalker`, and a valid reply revives it. Dead seats are reported once to

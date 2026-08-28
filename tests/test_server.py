@@ -309,3 +309,50 @@ async def test_a_hanging_artifact_write_cannot_outlive_its_budget(monkeypatch, t
     )
     outcome = await asyncio.wait_for(game.run_episode(), 30)
     assert outcome.reason == "complete"
+
+
+# ------------------------------------------------- a peer that stops reading
+async def test_a_player_that_stops_reading_its_socket_cannot_stall_run_episode(tmp_path):
+    """r2-F2: a peer that holds its socket open and stops draining it applies
+    flow control back to `ws.send_str`, which parks on the transport's drain
+    waiter with no timeout of its own — reproduced in the r2 review with a raw
+    socket and a 2 KB receive buffer, where `run_episode()` never returned.
+
+    The write shares the turn's deadline, so the episode settles, the seat is
+    substituted and the artifacts are written."""
+    results = tmp_path / "results.json"
+    game = GameServer(
+        make_config(
+            episode_steps=8,
+            turn_deadline_ms=100,
+            directive_deadline_ms=200,
+            player_connect_timeout_seconds=1.0,
+        ),
+        results_uri=f"file://{results}",
+    )
+    client = TestClient(TestServer(game.make_app()))
+    await client.start_server()
+    unblock = asyncio.Event()
+    try:
+        ws = await client.ws_connect("/player?slot=0&token=token-0")
+        await ws.receive()  # hello
+
+        async def never_drains(_payload: str) -> None:
+            await unblock.wait()
+
+        game.seats[0].ws.send_str = never_drains
+        started = asyncio.get_running_loop().time()
+        outcome = await asyncio.wait_for(game.run_episode(), 60)
+        spent = asyncio.get_running_loop().time() - started
+        unblock.set()
+        await ws.close()
+    finally:
+        unblock.set()
+        await client.close()
+
+    assert outcome.reason == "complete"
+    assert outcome.results["fallbacks"][0]["disconnected"] > 0
+    # Bounded end to end: the blocked write costs one turn deadline and the
+    # `done` broadcast to the same socket is capped at 5 s.
+    assert spent < 20.0, f"run_episode took {spent:.1f}s with one blocked peer"
+    assert json.loads(results.read_text())["reason"] == "complete"

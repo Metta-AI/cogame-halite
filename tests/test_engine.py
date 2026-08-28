@@ -89,8 +89,14 @@ async def test_a_hung_seat_cannot_stall_the_episode():
 
 
 def test_no_await_on_player_input_escapes_a_deadline():
-    """Static scan: every await on a seat link is inside an asyncio.wait with a
-    timeout, or is a send."""
+    """Static scan: every await on a seat link — the reply AND the write — is
+    under a timeout.
+
+    The write half is the r2-F2 scar: `await state.link.send(frame)` with no
+    bound parks on the transport's drain waiter the moment a peer stops
+    reading its socket, and nothing downstream (strike rule, budget guard,
+    hard stop) is evaluated again until the batch returns.
+    """
     source = (REPO / "server" / "cogame_halite" / "engine.py").read_text()
     awaits = re.findall(r"await ([a-zA-Z_.\[\]()\"' ]+)", source)
     for expression in awaits:
@@ -98,7 +104,85 @@ def test_no_await_on_player_input_escapes_a_deadline():
         assert not expression.startswith("state.link.receive"), (
             "a bare await on a player's receive() has no deadline"
         )
-    assert "asyncio.wait(" in source and "timeout=deadline_ms / 1000.0" in source
+        assert not expression.startswith("state.link.send"), (
+            "a bare await on a player's send() has no deadline (r2-F2)"
+        )
+    assert "asyncio.wait_for(state.link.send(frame), budget)" in source
+    assert "asyncio.wait(" in source and "timeout=budget" in source
+    assert "budget = deadline_ms / 1000.0" in source, (
+        "the writes and the replies share ONE turn deadline"
+    )
+
+
+async def test_a_seat_that_stops_reading_its_socket_cannot_stall_the_batch():
+    """r2-F2, reproduced in process: a peer that holds its link open but never
+    drains it makes `send` block forever. Bounded, the batch still finishes,
+    the seat is substituted as `disconnected`, and the link is dropped rather
+    than costing the deadline again every turn."""
+
+    class Blocked(FakeLink):
+        async def send(self, message):
+            self.trace.append(("send", self.seat, message["turn"]))
+            await asyncio.Event().wait()  # never drains, never raises
+
+    cfg = make_config(episode_steps=8, turn_deadline_ms=40, directive_deadline_ms=100)
+    logged: list[str] = []
+    engine = Engine(cfg, [Blocked(0)] + links(*[{}] * 4)[1:], sleep=nosleep,
+                    log=logged.append)
+    outcome = await asyncio.wait_for(engine.run(), 30)
+
+    assert outcome.reason == "complete"
+    assert engine.seats[0].fallbacks["disconnected"] > 0
+    assert engine.seats[0].link is None, "a link that will not drain is dropped"
+    assert any("STOPPED READING" in line for line in logged), logged
+    # The other three seats keep playing. They lose exactly the one turn whose
+    # deadline the blocked write spent -- counted as `host_error`, because
+    # nothing is wrong with THEIR peers -- and their links survive.
+    assert engine.seats[2].fallbacks["host_error"] == 1
+    assert engine.seats[2].fallbacks["disconnected"] == 0
+    assert engine.seats[2].link is not None
+    assert outcome.replay.turns[-1]["t"] == 7
+
+
+async def test_a_blocked_write_costs_the_batch_one_deadline_not_two():
+    """The writes share the turn's deadline with the replies, so the worst a
+    blocked socket can add to a turn is ONE `deadlineMs` — which is what the
+    718 s <= 720 s container arithmetic assumes (see
+    `tests/test_server.py::test_the_worst_case_container_time_fits_inside_the_platform_pin`).
+    A seat the block deprived of its window is a `host_error`, never a
+    `timeout`: nothing is wrong with its peer."""
+
+    class Blocked(FakeLink):
+        async def send(self, message):
+            self.trace.append(("send", self.seat, message["turn"]))
+            await asyncio.Event().wait()
+
+    class Slow(FakeLink):
+        """A healthy peer that does not answer instantly."""
+
+        async def receive(self):
+            await asyncio.sleep(0.2)
+            return await super().receive()
+
+    cfg = make_config(episode_steps=2, turn_deadline_ms=300, directive_deadline_ms=300,
+                      directive_every=1)
+    # Seat 3 blocks, so seats 0-2 are written to first and awaited after it.
+    seats = [Slow(seat) for seat in range(3)] + [Blocked(3)]
+    engine = Engine(cfg, seats, sleep=nosleep)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    outcome = await asyncio.wait_for(engine.run(), 30)
+    spent = loop.time() - started
+
+    assert outcome.reason == "complete"
+    assert engine.seats[3].fallbacks["disconnected"] == 1
+    for seat in (0, 1, 2):
+        assert engine.seats[seat].fallbacks["host_error"] == 1
+        assert engine.seats[seat].fallbacks["timeout"] == 0
+    assert spent < 0.45, (
+        f"the blocked-write turn took {spent:.2f}s: the writes and the replies "
+        "must share one deadline (0.3 s), not take one each"
+    )
 
 
 # ------------------------------------------------------------ fallback causes

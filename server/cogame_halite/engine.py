@@ -12,7 +12,10 @@ Every wait is bounded. The fallback ladder's server-side half lives here:
    orders ``tidewalker`` compiles from the same state, in-process
    (``micro.compile_turn`` — the same function the scripted player imports), a
    ``fallback`` event records the cause, and the sim steps. **The sim never
-   waits.**
+   waits.** The seat's ``observe`` **write** shares that same deadline: a peer
+   that holds its socket open but stops reading it parks the write on the
+   transport's drain waiter, so the frame is cut off at the deadline, the seat
+   counts as ``disconnected`` and its link is dropped.
 5. ten consecutive substitutions mark the seat dead: it is no longer awaited
    (so it cannot consume the deadline), it keeps playing ``tidewalker``, and a
    valid reply revives it.
@@ -271,15 +274,56 @@ class Engine:
             self.last_directive_open = self.clock()
 
         # --- every observe frame is written BEFORE any reply is awaited ----
+        # The writes are BOUNDED, and they share this turn's deadline with the
+        # replies. A peer that holds its socket open but stops reading it
+        # applies flow control all the way back to ``ws.send_str``, which then
+        # parks on the transport's drain waiter with no timeout of its own: an
+        # unbounded write here stalls the episode forever, strike rule and
+        # budget guard included, because neither is evaluated again until the
+        # batch returns. One budget for the whole batch also keeps the
+        # worst-case turn at ``deadlineMs``, which is the number the 720 s
+        # container pin is computed from.
+        budget = deadline_ms / 1000.0
+        blocked_write = False
         sent: list[SeatState] = []
-        failed_send: dict[int, str] = {}
+        failed_send: dict[int, tuple[str, str]] = {}
         for state in reachable:
             frame = self._observation(state.seat, turn, directive, deadline_ms)
             try:
-                await state.link.send(frame)
+                await asyncio.wait_for(state.link.send(frame), budget)
                 sent.append(state)
+            except (asyncio.TimeoutError, TimeoutError):
+                if budget > 0.0:
+                    # THIS is the seat that would not drain: half a frame is on
+                    # its wire and the peer is not reading. The link is
+                    # unusable, and asking it again next turn would spend
+                    # another deadline, so it is dropped here -- the seat then
+                    # takes the ordinary `disconnected` path (one substitution
+                    # per turn, then the strike rule), which is what a peer
+                    # that stopped reading is.
+                    budget = 0.0
+                    blocked_write = True
+                    state.link = None
+                    failed_send[state.seat] = (
+                        "disconnected",
+                        f"the socket did not drain inside the {deadline_ms}ms deadline",
+                    )
+                    self.log(
+                        f"SEAT {state.seat} ({self._alias(state.seat)}) STOPPED "
+                        f"READING its socket on turn {turn}; the write was cut off "
+                        f"at {deadline_ms}ms and the seat is substituted from here"
+                    )
+                else:
+                    # Collateral: the turn's deadline was already spent on the
+                    # seat above, so this frame never went out. Nothing is
+                    # wrong with THIS peer, so its link survives and the cause
+                    # is the host's -- next turn it is asked again as usual.
+                    failed_send[state.seat] = (
+                        "host_error",
+                        "the turn deadline was spent on a socket that would not drain",
+                    )
             except Exception as exc:  # noqa: BLE001 - transport is untrusted
-                failed_send[state.seat] = f"{type(exc).__name__}: {exc}"
+                failed_send[state.seat] = ("host_error", f"{type(exc).__name__}: {exc}")
         self.batch_trace.append(
             {
                 "turn": turn,
@@ -299,9 +343,7 @@ class Engine:
                 asyncio.ensure_future(state.link.receive()): state.seat for state in live
             }
             try:
-                done, pending = await asyncio.wait(
-                    tasks.keys(), timeout=deadline_ms / 1000.0
-                )
+                done, pending = await asyncio.wait(tasks.keys(), timeout=budget)
             finally:
                 pass
             for task in done:
@@ -323,23 +365,30 @@ class Engine:
                 sources[seat] = "fallback"
                 continue
             if state not in live:
-                cause = (
-                    "host_error"
-                    if seat in failed_send
-                    else ("disconnected" if not guard else "")
-                )
+                cause, detail = failed_send.get(seat, ("disconnected", ""))
                 if guard or state.dead:
                     # A dead seat keeps playing tidewalker; it is not awaited,
                     # so it is not a fresh substitution either.
                     orders[seat] = self._scripted_orders(seat)
                     sources[seat] = "fallback"
                     continue
-                self._substitute(state, cause or "disconnected", failed_send.get(seat, ""), orders, turn_events)
+                self._substitute(state, cause, detail, orders, turn_events)
                 sources[seat] = "fallback"
                 continue
             message = replies.get(seat)
             if seat not in replies:
-                self._substitute(state, "timeout", f"no reply in {deadline_ms}ms", orders, turn_events)
+                # A blocked write spends the batch's deadline, so a seat it
+                # deprived did not time out -- the host never gave it a window.
+                if blocked_write:
+                    self._substitute(
+                        state,
+                        "host_error",
+                        "the turn deadline was spent on a socket that would not drain",
+                        orders,
+                        turn_events,
+                    )
+                else:
+                    self._substitute(state, "timeout", f"no reply in {deadline_ms}ms", orders, turn_events)
                 sources[seat] = "fallback"
                 continue
             if message is None:
