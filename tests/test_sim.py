@@ -348,6 +348,31 @@ def test_an_eliminated_seat_can_never_act_again():
     assert sim.players[0] == [0, {}, {}]
 
 
+def test_an_eliminated_seat_keeps_its_shipyard_and_it_stays_a_hazard():
+    """Upstream (``halite.py`` lines 195-202) clears ``obs.players[index]``
+    only for a status that is neither ACTIVE nor DONE. Elimination makes a seat
+    **DONE**, so its unfunded shipyard stays on the board — and an enemy ship
+    that walks onto it is destroyed with it. Clearing the assets here would be
+    fixing an upstream quirk."""
+    sim = sim_with([
+        (499, {"y0": idx(5, 5)}, {}),
+        (5000, {"y1": idx(9, 9)}, {"b": [idx(5, 6), 0]}),
+        (5000, {"y2": idx(8, 8)}, {"c": [idx(2, 2), 0]}),
+        (5000, {"y3": idx(7, 7)}, {"d": [idx(3, 3), 0]}),
+    ])
+    sim.step([{}, {}, {}, {}])
+    assert sim.eliminated[0] == 1
+    assert sim.players[0] == [499, {"y0": idx(5, 5)}, {}], (
+        "the eliminated seat's shipyard must survive: upstream keeps it"
+    )
+
+    # Seat 1 steps onto the abandoned yard: both the yard and the ship die.
+    result = sim.step([{}, {"b": "SOUTH"}, {}, {}])
+    assert sim.players[0][1] == {}
+    assert sim.players[1][2] == {}
+    assert any(event["k"] == "yardraze" for event in result.events)
+
+
 # ----------------------------------------------------------------------- 10
 def test_last_fleet_ends_the_episode():
     sim = sim_with([

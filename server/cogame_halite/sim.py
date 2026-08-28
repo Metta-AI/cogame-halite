@@ -290,6 +290,16 @@ class HaliteSim:
                         agent.status = "DONE"
 
         The constants come from the vendored ``Configuration``, never re-typed.
+
+        **An eliminated seat keeps its assets.** Upstream clears
+        ``obs.players[index]`` only for an agent whose status is neither
+        ACTIVE nor DONE (line 201-202 above: an INVALID/TIMEOUT/ERROR agent,
+        a status this engine never produces — a seat that stops answering is
+        substituted for, never invalidated). A **DONE** agent — which is what
+        elimination makes — keeps its shipyards in ``obs.players``, so an
+        unfunded yard stays on the board as a razing hazard and a
+        mining-suppressing cell for the seats still playing. Clearing it here
+        would be fixing an upstream quirk, which ``docs/PORTING.md`` forbids.
         """
         spawn_cost = self._configuration.spawn_cost
         for seat in range(self.num_seats):
@@ -298,7 +308,6 @@ class HaliteSim:
             bank, yards, ships = self.players[seat]
             if len(ships) == 0 and (len(yards) == 0 or bank < spawn_cost):
                 self.eliminated[seat] = self.turn
-                self.players[seat] = [bank, {}, {}]
                 result.eliminated_this_turn.append(seat)
                 result.events.append({"k": "eliminate", "seat": seat, "turn": self.turn})
         if self.num_seats > 1:
