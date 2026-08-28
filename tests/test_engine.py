@@ -196,6 +196,35 @@ async def test_a_dead_seat_is_reported_once_with_the_closed_payload():
     assert reported[0]["failed_policy_index"] == 0
 
 
+async def test_several_dead_seats_are_one_payload_that_names_them_all():
+    """The payload is closed and carries exactly ONE `failed_policy_index`,
+    and the failure channel is a URI write (a second write replaces the
+    first), so a report per seat would lose the earlier one. One payload: the
+    lowest dead seat as the index, every dead seat in the message."""
+    reported: list[dict] = []
+
+    async def on_failure(message: str, seat: int) -> None:
+        reported.append({"message": message, "failed_policy_index": seat})
+
+    cfg = make_config(episode_steps=16, turn_deadline_ms=30, directive_deadline_ms=100)
+    engine = Engine(
+        cfg,
+        links({}, {"behaviour": "silent"}, {}, {"behaviour": "silent"}),
+        sleep=nosleep,
+        on_player_failure=on_failure,
+    )
+    outcome = await engine.run()
+
+    assert outcome.results["dead_seats"] == [False, True, False, True]
+    assert len(reported) == 1
+    assert set(reported[0]) == {"message", "failed_policy_index"}
+    assert reported[0]["failed_policy_index"] == 1, "the lowest dead seat"
+    assert "1 (FLEET-BRAVO)" in reported[0]["message"]
+    assert "3 (FLEET-DELTA)" in reported[0]["message"], (
+        "a second failing seat must not be silent on this channel"
+    )
+
+
 # --------------------------------------------------- budget guard / hard stop
 async def test_the_budget_guard_fires_and_the_episode_still_ends_complete():
     clock = Clock(step=30.0)          # 30 s per clock read

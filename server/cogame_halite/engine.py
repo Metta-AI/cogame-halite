@@ -538,18 +538,31 @@ class Engine:
         return [events.lead(leader, banks[leader])]
 
     async def _report_dead_seats(self) -> None:
+        """One payload, naming every dead seat.
+
+        The platform's player-failure payload is CLOSED —
+        ``{"message", "failed_policy_index"}`` — so it carries exactly one
+        seat index, and the channel is a URI write: a second write replaces
+        the first rather than adding to it. Reporting per seat would therefore
+        *lose* the earlier failure. Instead the lowest dead seat is the
+        reported index (it struck out first) and the message names them all;
+        every dead seat is also in ``results.dead_seats`` and in the ``strike``
+        events."""
         if self.on_player_failure is None:
             return
-        for state in self.seats:
-            if not state.dead or state.reported_dead:
-                continue
+        dead = [s for s in self.seats if s.dead and not s.reported_dead]
+        if not dead:
+            return
+        for state in dead:
             state.reported_dead = True
-            with contextlib.suppress(Exception):
-                await self.on_player_failure(
-                    f"seat {state.seat} ({self._alias(state.seat)}) stopped answering "
-                    f"after {defaults.STRIKE_LIMIT} consecutive substitutions",
-                    state.seat,
-                )
+        who = ", ".join(f"{s.seat} ({self._alias(s.seat)})" for s in dead)
+        plural = "seats" if len(dead) > 1 else "seat"
+        with contextlib.suppress(Exception):
+            await self.on_player_failure(
+                f"{plural} {who} stopped answering after "
+                f"{defaults.STRIKE_LIMIT} consecutive substitutions",
+                dead[0].seat,
+            )
 
 
 class _RejectedReply(Exception):
