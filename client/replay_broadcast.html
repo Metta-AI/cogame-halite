@@ -1113,7 +1113,12 @@ body[data-embed] #board { top: 0; height: 100%; }
    exactly this. So the halite feed reserves a band sized from that cap and
    wraps inside it. */
 #killfeed {
-  width: calc(300 * var(--u));
+  /* Never wider than a third of the frame, whatever --hudscale is doing: at
+     360 px a 300-unit band would be the whole page, and a stale --hudscale
+     between a resize and the next relayout() must not be able to push the band
+     past the right edge. */
+  width: min(calc(300 * var(--u)), 33%);
+  right: calc(16 * var(--u));
   max-height: calc(100% - var(--topband, 0px) - var(--band, 0px) - 90 * var(--u));
   overflow: hidden;
 }

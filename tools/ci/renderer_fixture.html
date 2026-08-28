@@ -133,21 +133,27 @@
   // A run laid out at a negative coordinate, or past the frame, lands outside
   // the canvas and viewer_smoke.mjs's --strict-text-bounds fails the job.
   function transcribe(doc, canvas) {
+    // The canvas IS the iframe's own viewport, 1:1. Scaling the transcription
+    // was worth ~5% and turned every right-anchored run into a false positive;
+    // at scale 1 an "outside the canvas" verdict means the page genuinely laid
+    // that text outside its own frame, which is the only thing worth gating.
+    const frameRect = frame.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.round(frameRect.width));
+    canvas.height = Math.max(1, Math.round(frameRect.height));
+    canvas.style.width = '120px';
+    canvas.style.height = Math.round(120 * canvas.height / canvas.width) + 'px';
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#f2e8d8';
     ctx.textBaseline = 'alphabetic';
-    const frameRect = frame.getBoundingClientRect();
-    const scaleX = canvas.width / Math.max(1, frameRect.width);
-    const scaleY = canvas.height / Math.max(1, frameRect.height);
     let drawn = 0;
     for (const host of ['#killfeed', '#scorebug', '#clock', '#endcard', '#transport']) {
       const root = doc.querySelector(host);
       if (!root) continue;
       for (const run of lineRuns(root)) {
         const px = parseFloat(run.style.fontSize) || 12;
-        ctx.font = Math.max(6, px * scaleY) + 'px ' + (run.style.fontFamily || 'sans-serif');
-        ctx.fillText(run.text, run.left * scaleX, run.bottom * scaleY);
+        ctx.font = Math.max(6, px) + 'px ' + (run.style.fontFamily || 'sans-serif');
+        ctx.fillText(run.text, run.left, run.bottom);
         drawn++;
       }
     }
@@ -194,40 +200,53 @@
     .catch(function (error) { fail(error && error.message ? error.message : String(error)); });
 
   var passes = 0;
-  setInterval(function () {
-    if (failed) return;
+  var busy = false;
+
+  function nextFrame() {
+    return new Promise(function (resolve) { requestAnimationFrame(function () { resolve(); }); });
+  }
+
+  async function pass() {
+    if (failed || busy) return;
     var inner;
     try { inner = frame.contentDocument; } catch (error) { return; }
     if (!inner || !inner.documentElement) return;
     var innerError = inner.documentElement.getAttribute('data-replay-error');
     if (innerError) { fail('shipped page: ' + innerError); return; }
     if (inner.documentElement.getAttribute('data-replay-loaded') !== 'true') return;
+    busy = true;
+    try {
+      mirrorIds.forEach(function (id) {
+        var node = inner.querySelector('#' + id);
+        document.getElementById(id).textContent =
+          node ? (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim() : '';
+      });
 
-    mirrorIds.forEach(function (id) {
-      var node = inner.querySelector('#' + id);
-      document.getElementById(id).textContent =
-        node ? (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim() : '';
-    });
-
-    // One canvas size per pass, so all three are exercised before the fixture
-    // declares itself loaded.
-    var wh = sizes[sizeIndex];
-    frame.width = wh[0];
-    frame.height = wh[1];
-    var drawn = transcribe(inner, canvases[sizeIndex]);
-    if (drawn === 0) {
-      fail('no text runs found in the shipped chrome at ' + wh[0] + 'x' + wh[1]);
-      return;
-    }
-    sizeIndex++;
-    passes++;
-    if (sizeIndex >= sizes.length) {
-      sizeIndex = 0;
+      // One canvas size per pass, so all three are exercised. The iframe is
+      // resized FIRST, then two frames are yielded so the inner layout and the
+      // page's own relayout() (which rides the resize event and owns
+      // --hudscale/--band) have both settled before anything is measured.
+      var wh = sizes[sizeIndex];
+      frame.width = wh[0];
+      frame.height = wh[1];
+      await nextFrame();
+      await nextFrame();
+      var drawn = transcribe(inner, canvases[sizeIndex]);
+      if (drawn === 0) {
+        fail('no text runs found in the shipped chrome at ' + wh[0] + 'x' + wh[1]);
+        return;
+      }
+      sizeIndex = (sizeIndex + 1) % sizes.length;
+      passes++;
       if (passes >= sizes.length) {
         document.documentElement.setAttribute('data-replay-loaded', 'true');
       }
+    } finally {
+      busy = false;
     }
-  }, 200);
+  }
+
+  setInterval(pass, 200);
 })();
 </script>
 </body>
