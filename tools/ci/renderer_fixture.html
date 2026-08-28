@@ -259,6 +259,43 @@
     try { return frame.contentDocument; } catch (error) { return null; }
   }
 
+  // Measure the SETTLED layout. The inherited chrome slides a feed row in from
+  // translateX(30 units) over 250 ms (@keyframes feedin), and a transformed
+  // element's client rects are the transformed ones -- an entrance animation is
+  // explicitly NOT a defect (viewer_smoke.mjs's own note on --strict-text-bounds
+  // says so), so it must not be transcribed as one.
+  var stilled = new WeakSet();
+  function stillAnimations(doc) {
+    if (stilled.has(doc)) return;
+    stilled.add(doc);
+    var style = doc.createElement('style');
+    style.textContent =
+      '*, *::before, *::after { animation: none !important; transition: none !important; }';
+    doc.head.appendChild(style);
+  }
+
+  // One line of geometry per frame, surfaced through #status (which
+  // viewer_smoke.mjs prints on failure) so a bounds failure names the layout it
+  // happened in instead of leaving it to be guessed.
+  function geometryNote(doc) {
+    var view = doc.documentElement;
+    var stage = doc.getElementById('stage');
+    var feed = doc.getElementById('killfeed');
+    var row = feed && feed.firstElementChild;
+    var css = doc.defaultView.getComputedStyle;
+    var stageBox = stage ? stage.getBoundingClientRect() : { width: 0 };
+    var feedBox = feed ? feed.getBoundingClientRect() : { left: 0, right: 0 };
+    var rowBox = row ? row.getBoundingClientRect() : { left: 0, right: 0 };
+    return 'view=' + view.clientWidth + 'x' + view.clientHeight +
+      ' stage=' + Math.round(stageBox.width) +
+      ' tiny=' + (stage && stage.classList.contains('tiny') ? 1 : 0) +
+      ' hudscale=' + (css(view).getPropertyValue('--hudscale') || '?').trim() +
+      ' feed=[' + Math.round(feedBox.left) + ',' + Math.round(feedBox.right) + ']' +
+      ' row=[' + Math.round(rowBox.left) + ',' + Math.round(rowBox.right) + ']' +
+      ' rowfont=' + (row ? css(row).fontSize : '?') +
+      ' rowwrap=' + (row ? css(row).whiteSpace : '?');
+  }
+
   setInterval(function () {
     if (failed) return;
     var ready = [];
@@ -268,15 +305,19 @@
       var innerError = doc.documentElement.getAttribute('data-replay-error');
       if (innerError) { fail('shipped page: ' + innerError); return; }
       if (doc.documentElement.getAttribute('data-replay-loaded') !== 'true') return;
+      stillAnimations(doc);
       ready.push(doc);
     }
 
-    // The soak reads these; the first (widest) frame is the representative one.
-    mirrorIds.forEach(function (id) {
+    // The soak reads the clock/tick/scorebug; #status carries the geometry of
+    // every frame, so a bounds failure is self-describing.
+    mirrorIds.slice(0, 3).forEach(function (id) {
       var node = ready[0].querySelector('#' + id);
       document.getElementById(id).textContent =
         node ? (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim() : '';
     });
+    document.getElementById('status').textContent =
+      ready.map(function (doc) { return geometryNote(doc); }).join('  |  ');
 
     for (var k = 0; k < ready.length; k++) {
       var drawn = transcribe(ready[k], canvases[k]);
