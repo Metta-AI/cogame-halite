@@ -242,6 +242,23 @@
     return new Promise(function (resolve) { requestAnimationFrame(function () { resolve(); }); });
   }
 
+  // A rendering opportunity in the CHILD document's own lifecycle, with a
+  // forced layout read inside it so its line boxes are final before the parent
+  // measures them.
+  function innerFrame(inner) {
+    return new Promise(function (resolve) {
+      var view = inner.defaultView;
+      if (!view || typeof view.requestAnimationFrame !== 'function') {
+        setTimeout(resolve, 50);
+        return;
+      }
+      view.requestAnimationFrame(function () {
+        void inner.body.getBoundingClientRect().width;
+        resolve();
+      });
+    });
+  }
+
   async function pass() {
     if (failed || busy) return;
     var inner;
@@ -265,12 +282,22 @@
       var wh = sizes[sizeIndex];
       frame.width = wh[0];
       frame.height = wh[1];
-      // The inner page's relayout() rides the `resize` event, which is
-      // dispatched asynchronously; measuring before it has run reads a stale
-      // --hudscale and a stale #stage.tiny.
-      await new Promise(function (resolve) { setTimeout(resolve, 150); });
-      await nextFrame();
-      await nextFrame();
+      // Wait for the CHILD's own rendering steps, not the parent's. Resizing
+      // the <iframe> element updates the child's clientWidth immediately, but
+      // its line breaking is redone on the child's next rendering opportunity;
+      // a parent-side rAF is a different lifecycle, and measuring across that
+      // gap transcribes the WIDE layout's line boxes into the narrow frame --
+      // which is exactly what a 59-character 1240px line reported inside a
+      // 360px canvas is.
+      await innerFrame(inner);
+      await innerFrame(inner);
+      await new Promise(function (resolve) { setTimeout(resolve, 120); });
+      await innerFrame(inner);
+      if (Math.abs(inner.documentElement.clientWidth - wh[0]) > 2) {
+        // The child has not taken the new width yet; try again next tick
+        // rather than measuring a layout that is about to change.
+        return;
+      }
       var drawn = transcribe(inner, canvases[sizeIndex]);
       if (drawn === 0) {
         fail('no text runs found in the shipped chrome at ' + wh[0] + 'x' + wh[1]);
