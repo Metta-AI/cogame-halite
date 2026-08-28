@@ -407,3 +407,31 @@ async def test_a_kaggle_bots_board_builds_from_the_wire_frame_unchanged():
             assert player.halite == bank
             assert sorted(s.id for s in player.ships) == sorted(ships)
             assert sorted(y.id for y in player.shipyards) == sorted(yards)
+
+
+async def test_the_budget_can_be_measured_from_an_instant_the_caller_supplies():
+    """The server hands the engine PROCESS start, so the lobby is spent inside
+    the 600 s guard and the 660 s hard stop rather than before them."""
+    clock = Clock(step=0.0)
+    clock.now = 500.0
+    engine = Engine(
+        make_config(episode_steps=4),
+        links(*[{}] * 4),
+        clock=clock,
+        sleep=nosleep,
+        started_at=200.0,
+    )
+    assert engine.elapsed == 300.0
+
+    # A 130 s lobby plus a 540 s episode trips the guard; measured from the
+    # engine's own construction it would not have.
+    guarded = Engine(
+        make_config(episode_steps=4),
+        links(*[{}] * 4),
+        clock=Clock(step=610.0),
+        sleep=nosleep,
+        started_at=0.0,
+    )
+    outcome = await guarded.run()
+    assert guarded.budget_guard_fired
+    assert outcome.reason == "deadline"

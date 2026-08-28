@@ -234,3 +234,73 @@ async def test_replay_mode_serves_the_recorded_bytes(tmp_path):
         assert await response.read() == payload
     finally:
         await client.close()
+
+
+# --------------------------------------------------- the wall-clock budget
+async def test_the_engine_budget_is_measured_from_process_start(monkeypatch):
+    """The lobby waits up to `player_connect_timeout_seconds` (120 s) BEFORE
+    the engine exists. A budget that starts when the engine is constructed
+    bounds the episode but not the container, and the platform's timeout is on
+    the container. The server therefore hands the engine process start."""
+    import time
+
+    from cogame_halite import server as server_module
+
+    captured: dict = {}
+    real_engine = server_module.Engine
+
+    class Recorder(real_engine):
+        def __init__(self, *args, **kwargs):
+            captured.update(kwargs)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(server_module, "Engine", Recorder)
+    game = GameServer(make_config(episode_steps=4, player_connect_timeout_seconds=1.0))
+    outcome = await game.run_episode()
+
+    assert outcome.reason == "complete"
+    assert captured["started_at"] == server_module.PROCESS_STARTED_AT
+    assert captured["started_at"] < time.monotonic(), "process start is in the past"
+
+
+def test_the_worst_case_container_time_fits_inside_the_platform_pin():
+    """720 s = 60% of the platform's 1200 s episode timeout. Worst case, from
+    process start: the hard stop, one in-flight directive turn, the artifact
+    phase and the shutdown grace."""
+    from cogame_halite.server import ARTIFACT_WRITE_BUDGET_SECONDS
+
+    pin = defaults.PLATFORM_EPISODE_TIMEOUT_MINUTES * 60 * 0.6
+    worst = (
+        defaults.DEFAULT_WALL_CLOCK_BUDGET_SECONDS
+        + defaults.DEFAULT_DIRECTIVE_DEADLINE_MS / 1000.0
+        + ARTIFACT_WRITE_BUDGET_SECONDS
+        + SHUTDOWN_GRACE_SECONDS
+    )
+    assert pin == 720
+    assert worst <= pin, f"worst modelled container time {worst}s exceeds the {pin}s pin"
+    # And the lobby is INSIDE the hard stop, not added to it.
+    assert (
+        defaults.DEFAULT_PLAYER_CONNECT_TIMEOUT_SECONDS
+        < defaults.DEFAULT_BUDGET_GUARD_SECONDS
+        < defaults.DEFAULT_WALL_CLOCK_BUDGET_SECONDS
+    )
+
+
+async def test_a_hanging_artifact_write_cannot_outlive_its_budget(monkeypatch, tmp_path):
+    """`uris.write_uri` is bounded per attempt (3 x 30 s + backoff); two
+    artifacts at that bound is ~182 s of container time, which is what pushed
+    the worst case past the pin. The phase itself is capped."""
+    from cogame_halite import server as server_module
+
+    async def never(*_args, **_kwargs):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(server_module.uris, "write_uri", never)
+    monkeypatch.setattr(server_module, "ARTIFACT_WRITE_BUDGET_SECONDS", 0.2)
+    game = GameServer(
+        make_config(episode_steps=4, player_connect_timeout_seconds=1.0),
+        results_uri=f"file://{tmp_path / 'results.json'}",
+        save_replay_uri=f"file://{tmp_path / 'replay.json'}",
+    )
+    outcome = await asyncio.wait_for(game.run_episode(), 30)
+    assert outcome.reason == "complete"

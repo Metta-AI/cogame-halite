@@ -52,7 +52,10 @@ viewer contract are [`docs/REPLAY.md`](docs/REPLAY.md).
   scorebug plates and the endcard. `tests/test_privacy.py` enforces both ways.
 - **Degrade, never hang.** Every wait is bounded: the lobby, the shared
   per-turn deadline, the directive spacing floor, the strike rule, the budget
-  guard at 600 s and the hard stop at 660 s. Bad player input is a
+  guard at 600 s and the hard stop at 660 s — both measured from **process
+  start** (`server.PROCESS_STARTED_AT`), so the lobby is spent inside them —
+  plus a 20 s cap on the artifact phase and the 20 s shutdown grace. Worst
+  case 660 + 18 + 20 + 20 = 718 s, inside the 720 s pin. Bad player input is a
   substitution, never a crash. A sim fault is an *outcome*
   (`results.reason = "fault"`), and the artifacts are still written.
 - **The viewer is a static wasm bundle, never a pod.** `client/chrome_common.js`

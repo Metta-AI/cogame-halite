@@ -83,6 +83,7 @@ class Engine:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         on_player_failure: Callable[[str, int], Awaitable[None]] | None = None,
         log: Callable[[str], None] = lambda _msg: None,
+        started_at: float | None = None,
     ) -> None:
         self.config = config
         self.sim = HaliteSim(config)
@@ -91,7 +92,12 @@ class Engine:
         self.sleep = sleep
         self.on_player_failure = on_player_failure
         self.log = log
-        self.started_at = clock()
+        #: The instant both budgets are measured from. The server passes
+        #: **process start**, so the lobby (up to
+        #: ``player_connect_timeout_seconds`` = 120 s) is spent inside the
+        #: budget rather than before it — otherwise the 720 s platform pin
+        #: bounds neither. Defaults to now for in-process callers (tests).
+        self.started_at = clock() if started_at is None else started_at
         self.budget_guard_fired = False
         self.leader: int | None = None
         self.last_directive_open: float | None = None

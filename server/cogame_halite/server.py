@@ -32,6 +32,7 @@ import hmac
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 from aiohttp import WSMsgType, web
@@ -45,9 +46,34 @@ from .version import GAME_VERSION, PROTOCOL
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VIEWER_DIST = REPO_ROOT / "viewer" / "dist"
 
+#: Process start, taken at import — the earliest instant this container can
+#: observe. Both engine budgets (the 600 s guard and the 660 s hard stop) are
+#: measured from here, so the lobby is spent INSIDE them.
+PROCESS_STARTED_AT = time.monotonic()
+
 PLAYER_WS_HEARTBEAT_SECONDS = 30.0
 #: Keep /healthz and /global answering this long after artifacts are written.
 SHUTDOWN_GRACE_SECONDS = 20.0
+#: A hard cap on the whole artifact phase. `uris.write_uri` is already bounded
+#: per attempt (3 x 30 s + backoff), but two artifacts x that bound is ~182 s,
+#: which is what pushed the worst case past the pin. This caps the phase.
+#:
+#: The 720 s pin (60% of the platform's 1200 s `episodeTimeoutSeconds`), from
+#: PROCESS start, worst case:
+#:
+#:     hard stop            660 s   (engine.py, measured from PROCESS_STARTED_AT,
+#:                                   so the <=120 s lobby is inside it)
+#:   + one in-flight turn    18 s   (the stop is checked at a turn boundary and
+#:                                   a directive turn's deadline is 18 s)
+#:   + artifacts             20 s   (ARTIFACT_WRITE_BUDGET_SECONDS, below)
+#:   + shutdown grace        20 s   (SHUTDOWN_GRACE_SECONDS)
+#:   ------------------------------
+#:                          718 s   < 720 s
+#:
+#: The realistic path is much shorter: the budget guard at 600 s stops asking
+#: players anything, and the remaining turns run at ~2 ms each, so the episode
+#: ends around 618 s and the container exits around 658 s.
+ARTIFACT_WRITE_BUDGET_SECONDS = 20.0
 
 _PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -150,6 +176,7 @@ class GameServer:
         self._global_wss: set[web.WebSocketResponse] = set()
         self._failure_reported = False
         self._last_turn = 0
+        self.started_at = PROCESS_STARTED_AT
 
     # ------------------------------------------------------------- routing
 
@@ -309,6 +336,10 @@ class GameServer:
             [seat if seat.ever_connected else None for seat in self.seats],
             on_player_failure=self._engine_player_failure,
             log=lambda message: print(message, file=sys.stderr),
+            # Measured from PROCESS start, not from here: the lobby above can
+            # burn up to `player_connect_timeout_seconds` (120 s), and a budget
+            # that starts after it bounds the episode but not the container.
+            started_at=self.started_at,
         )
         for seat, state in zip(self.seats, engine.seats):
             state.policy = seat.policy
@@ -322,7 +353,21 @@ class GameServer:
         ]
         self._log_outcome(outcome)
         await self._broadcast_done(outcome.results)
-        await self._write_artifacts(outcome)
+        try:
+            await asyncio.wait_for(
+                self._write_artifacts(outcome), ARTIFACT_WRITE_BUDGET_SECONDS
+            )
+        except (asyncio.TimeoutError, TimeoutError):
+            print(
+                "artifact writes exceeded the "
+                f"{ARTIFACT_WRITE_BUDGET_SECONDS:.0f}s budget and were cut off",
+                file=sys.stderr,
+            )
+        print(
+            f"episode settled {engine.elapsed:.1f}s after process start "
+            f"(hard stop {cfg.wall_clock_budget_seconds:.0f}s)",
+            file=sys.stderr,
+        )
         return outcome
 
     def _log_outcome(self, outcome: EpisodeOutcome) -> None:
