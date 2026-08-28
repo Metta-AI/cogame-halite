@@ -89,18 +89,42 @@
     canvases.push(canvas);
   });
 
-  function textNodesOf(doc) {
-    // Every LEAF element that carries visible text: the feed rows (the LLM
-    // notes), the scorebug plates, the clock and the endcard.
-    var out = [];
-    var roots = doc.querySelectorAll(
-      '#killfeed *, #scorebug *, #clock *, #endcard *, #transport .tick-clock');
-    for (var i = 0; i < roots.length; i++) {
-      var el = roots[i];
-      if (el.children.length) continue;
-      var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!text) continue;
-      out.push({ el: el, text: text });
+  // Every VISUAL LINE BOX of every text node in the chrome, with the exact
+  // substring the browser laid out on it. Character-level Range rects are how
+  // a wrapped row is transcribed as the two lines it really is instead of as
+  // one impossible single-line run -- otherwise every wrapped element is a
+  // false positive and the gate is worthless in the other direction.
+  function lineRuns(root) {
+    const doc = root.ownerDocument;
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const range = doc.createRange();
+    const out = [];
+    let node;
+    while ((node = walker.nextNode())) {
+      const data = node.data;
+      if (!data || !data.trim()) continue;
+      const style = doc.defaultView.getComputedStyle(node.parentElement);
+      if (style.display === 'none' || style.visibility === 'hidden') continue;
+      let start = 0;
+      let top = null;
+      let left = 0;
+      let bottom = 0;
+      for (let i = 0; i < data.length; i++) {
+        range.setStart(node, i);
+        range.setEnd(node, i + 1);
+        const box = range.getBoundingClientRect();
+        if (!box.width && !box.height) continue;
+        const rowTop = Math.round(box.top);
+        if (top === null) {
+          top = rowTop; left = box.left; bottom = box.bottom; start = i;
+        } else if (rowTop !== top) {
+          out.push({ text: data.slice(start, i), left, bottom, style });
+          top = rowTop; left = box.left; bottom = box.bottom; start = i;
+        } else {
+          bottom = Math.max(bottom, box.bottom);
+        }
+      }
+      if (top !== null) out.push({ text: data.slice(start), left, bottom, style });
     }
     return out;
   }
@@ -109,24 +133,24 @@
   // A run laid out at a negative coordinate, or past the frame, lands outside
   // the canvas and viewer_smoke.mjs's --strict-text-bounds fails the job.
   function transcribe(doc, canvas) {
-    var ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#f2e8d8';
     ctx.textBaseline = 'alphabetic';
-    var frameRect = frame.getBoundingClientRect();
-    var scaleX = canvas.width / Math.max(1, frameRect.width);
-    var scaleY = canvas.height / Math.max(1, frameRect.height);
-    var runs = textNodesOf(doc);
-    var drawn = 0;
-    runs.forEach(function (run) {
-      var box = run.el.getBoundingClientRect();
-      if (!box.width && !box.height) return;
-      var style = doc.defaultView.getComputedStyle(run.el);
-      var px = parseFloat(style.fontSize) || 12;
-      ctx.font = Math.max(6, px * scaleY) + 'px ' + (style.fontFamily || 'sans-serif');
-      ctx.fillText(run.text, box.left * scaleX, box.bottom * scaleY);
-      drawn++;
-    });
+    const frameRect = frame.getBoundingClientRect();
+    const scaleX = canvas.width / Math.max(1, frameRect.width);
+    const scaleY = canvas.height / Math.max(1, frameRect.height);
+    let drawn = 0;
+    for (const host of ['#killfeed', '#scorebug', '#clock', '#endcard', '#transport']) {
+      const root = doc.querySelector(host);
+      if (!root) continue;
+      for (const run of lineRuns(root)) {
+        const px = parseFloat(run.style.fontSize) || 12;
+        ctx.font = Math.max(6, px * scaleY) + 'px ' + (run.style.fontFamily || 'sans-serif');
+        ctx.fillText(run.text, run.left * scaleX, run.bottom * scaleY);
+        drawn++;
+      }
+    }
     return drawn;
   }
 

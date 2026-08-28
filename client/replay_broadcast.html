@@ -1105,6 +1105,26 @@ body[data-embed] #board { top: 0; height: 100%; }
 #stage.tiny .plate .plate-name { display: none; }
 
 /* --- feed lines the halite event vocabulary emits ------------------------- */
+/* The inherited feed row is `white-space: nowrap; max-width: none` because a
+   ctf kill line is a handful of pre-bounded words. A halite `note` is a
+   FULL 140 RUNES of spectator-facing LLM text (defaults.MAX_NOTE_RUNES), which
+   a nowrap row grows straight past the frame -- drawn, clipped, unreadable and
+   invisible to every gate except tools/ci/renderer_fixture.html, which caught
+   exactly this. So the halite feed reserves a band sized from that cap and
+   wraps inside it. */
+#killfeed {
+  width: calc(300 * var(--u));
+  max-height: calc(100% - var(--topband, 0px) - var(--band, 0px) - 90 * var(--u));
+  overflow: hidden;
+}
+.feed-row {
+  display: block;
+  text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  line-height: 1.25;
+}
 .feed-row .hal-amount { color: var(--amber); font-family: var(--pixfont); }
 .feed-row .hal-note { color: var(--paper-dim); font-style: italic; }
 .feed-row .who { color: var(--tc, var(--paper)); }
