@@ -242,11 +242,15 @@ async def test_replay_mode_serves_the_recorded_bytes(tmp_path):
 
 
 # --------------------------------------------------- the wall-clock budget
-async def test_the_engine_budget_is_measured_from_process_start(monkeypatch):
+async def test_the_engine_budget_opens_before_the_lobby_and_not_at_import(monkeypatch):
     """The lobby waits up to `player_connect_timeout_seconds` (120 s) BEFORE
-    the engine exists. A budget that starts when the engine is constructed
-    bounds the episode but not the container, and the platform's timeout is on
-    the container. The server therefore hands the engine process start."""
+    the engine exists, so a budget that starts when the engine is constructed
+    bounds the turns but not the episode: the anchor has to be taken before
+    the lobby.
+
+    It must NOT be process start (r2-F7): the platform may reuse a warm
+    container or start this process long before it hands it an episode, and
+    time the process spent idle is not the episode's to spend."""
     import time
 
     from cogame_halite import server as server_module
@@ -260,12 +264,34 @@ async def test_the_engine_budget_is_measured_from_process_start(monkeypatch):
             super().__init__(*args, **kwargs)
 
     monkeypatch.setattr(server_module, "Engine", Recorder)
+    monkeypatch.setattr(server_module, "PROCESS_STARTED_AT", time.monotonic() - 3600.0)
     game = GameServer(make_config(episode_steps=4, player_connect_timeout_seconds=1.0))
+    opened = time.monotonic()
     outcome = await game.run_episode()
 
     assert outcome.reason == "complete"
-    assert captured["started_at"] == server_module.PROCESS_STARTED_AT
-    assert captured["started_at"] < time.monotonic(), "process start is in the past"
+    assert captured["started_at"] == game.started_at, "the engine gets the server's anchor"
+    assert captured["started_at"] >= opened, "the anchor is this episode's, not the process's"
+    # Taken BEFORE the 1 s lobby the engine is constructed after, so the lobby
+    # is spent inside the guard and the hard stop.
+    assert captured["started_at"] < opened + 0.5
+
+
+async def test_an_episode_in_an_old_process_still_starts_with_a_full_budget(monkeypatch):
+    """r2-F7, reproduced: with both budgets anchored at import, a process older
+    than the 660 s hard stop settled its very first episode at turn 0 —
+    `reason=deadline end_rule=wall_clock turn=0` — because `elapsed` was
+    already past the stop before the first turn was played."""
+    import time
+
+    from cogame_halite import server as server_module
+
+    monkeypatch.setattr(server_module, "PROCESS_STARTED_AT", time.monotonic() - 700.0)
+    game = GameServer(make_config(episode_steps=6, player_connect_timeout_seconds=1.0))
+    outcome = await asyncio.wait_for(game.run_episode(), 60)
+
+    assert outcome.reason == "complete" and outcome.end_rule == "full_time"
+    assert outcome.final_turn == 5, "every turn was played, not just turn 0"
 
 
 def test_the_worst_case_container_time_fits_inside_the_platform_pin():

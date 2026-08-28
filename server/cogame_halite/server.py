@@ -44,8 +44,11 @@ from .replay import ReplayWriter
 from .version import GAME_VERSION, PROTOCOL
 
 #: Process start, taken at import — the earliest instant this container can
-#: observe. Both engine budgets (the 600 s guard and the 660 s hard stop) are
-#: measured from here, so the lobby is spent INSIDE them.
+#: observe. It is the DEFAULT budget anchor and the container's age in the
+#: settle log; `run_episode` re-anchors both engine budgets to the instant the
+#: EPISODE begins, because the platform may reuse a warm container or start
+#: this process well before it hands it an episode, and a process older than
+#: the hard stop would otherwise settle its first episode at turn 0.
 PROCESS_STARTED_AT = time.monotonic()
 
 PLAYER_WS_HEARTBEAT_SECONDS = 30.0
@@ -56,10 +59,12 @@ SHUTDOWN_GRACE_SECONDS = 20.0
 #: which is what pushed the worst case past the pin. This caps the phase.
 #:
 #: The 720 s pin (60% of the platform's 1200 s `episodeTimeoutSeconds`), from
-#: PROCESS start, worst case:
+#: the instant the EPISODE begins — everything a spectator can see of it is
+#: inside the window — worst case:
 #:
-#:     hard stop            660 s   (engine.py, measured from PROCESS_STARTED_AT,
-#:                                   so the <=120 s lobby is inside it)
+#:     hard stop            660 s   (engine.py, measured from the anchor
+#:                                   `run_episode` takes, so the <=120 s lobby
+#:                                   is inside it)
 #:   + one in-flight turn    18 s   (the stop is checked at a turn boundary and
 #:                                   a directive turn's deadline is 18 s)
 #:   + artifacts             20 s   (ARTIFACT_WRITE_BUDGET_SECONDS, below)
@@ -173,6 +178,9 @@ class GameServer:
         self._global_wss: set[web.WebSocketResponse] = set()
         self._failure_reported = False
         self._last_turn = 0
+        #: The instant both engine budgets are measured from. `run_episode`
+        #: re-anchors it to the episode's own start; until then it is process
+        #: start.
         self.started_at = PROCESS_STARTED_AT
         #: The engine's seat states, kept for the end-of-episode audit log.
         self._engine_seats: list = []
@@ -304,6 +312,15 @@ class GameServer:
 
     async def run_episode(self) -> EpisodeOutcome:
         cfg = self.config
+        # The budget window opens HERE and covers everything externally visible
+        # about this episode: the lobby below (bounded by
+        # `player_connect_timeout_seconds`), every turn, the artifact phase and
+        # the shutdown grace. It is deliberately not process start — the
+        # platform may reuse a warm container or start this process long before
+        # the episode, and with the anchor at import a process older than the
+        # 660 s hard stop settled its first episode at turn 0 with
+        # `reason = "deadline"`, before a single turn was played.
+        self.started_at = time.monotonic()
         with contextlib.suppress(asyncio.TimeoutError, TimeoutError):
             await asyncio.wait_for(
                 self._lobby_ready.wait(), cfg.player_connect_timeout_seconds
@@ -335,9 +352,9 @@ class GameServer:
             [seat if seat.ever_connected else None for seat in self.seats],
             on_player_failure=self._engine_player_failure,
             log=lambda message: print(message, file=sys.stderr),
-            # Measured from PROCESS start, not from here: the lobby above can
+            # Measured from the anchor above, not from here: the lobby can
             # burn up to `player_connect_timeout_seconds` (120 s), and a budget
-            # that starts after it bounds the episode but not the container.
+            # that starts after it bounds the turns but not the episode.
             started_at=self.started_at,
         )
         self._engine_seats = engine.seats
@@ -364,8 +381,9 @@ class GameServer:
                 file=sys.stderr,
             )
         print(
-            f"episode settled {engine.elapsed:.1f}s after process start "
-            f"(hard stop {cfg.wall_clock_budget_seconds:.0f}s)",
+            f"episode settled {engine.elapsed:.1f}s after the episode began "
+            f"(hard stop {cfg.wall_clock_budget_seconds:.0f}s; this container "
+            f"has been up {time.monotonic() - PROCESS_STARTED_AT:.1f}s)",
             file=sys.stderr,
         )
         return outcome
