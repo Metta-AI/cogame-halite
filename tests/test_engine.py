@@ -288,18 +288,34 @@ async def test_notes_reach_the_replay_rune_truncated():
 
 async def test_an_over_cap_action_map_is_trimmed_to_256_by_ascending_uid():
     class Flood(FakeLink):
+        sizes: list[int] = []
+
         async def send(self, message):
             self.trace.append(("send", self.seat, message["turn"]))
             actions = {f"0-{i}": "NORTH" for i in range(1, 400)}
             actions.update({k: "NORTH" for k in message["players"][self.seat][2]})
+            Flood.sizes.append(len(actions))
             self.queue.put_nowait(
                 {"type": "orders", "turn": message["turn"], "actions": actions})
 
+    Flood.sizes = []
     cfg = make_config(episode_steps=4)
-    engine = Engine(cfg, [Flood(0)] + links(*[{}] * 4)[1:], sleep=nosleep)
+    logged: list[str] = []
+    engine = Engine(cfg, [Flood(0)] + links(*[{}] * 4)[1:], sleep=nosleep,
+                    log=logged.append)
     outcome = await engine.run()
     for turn in outcome.replay.turns:
         assert len(turn["orders"][0]) <= defaults.MAX_ACTIONS_PER_TURN
+
+    # ... and every entry past the cap is DROPPED AND COUNTED, not silently
+    # trimmed (the design note's reply-cap table).
+    expected = sum(size - defaults.MAX_ACTIONS_PER_TURN for size in Flood.sizes)
+    assert expected > 0 and engine.seats[0].dropped_over_cap == expected
+    assert engine.seats[1].dropped_over_cap == 0
+    assert any("over the 256 cap were dropped" in line for line in logged), logged
+    # The reply itself was USED, so this is an audit counter and not a
+    # fallback cause: the closed `fallbacks` key set is untouched.
+    assert not any(engine.seats[0].fallbacks.values())
 
 
 async def test_unowned_ids_and_bad_enum_values_are_dropped():

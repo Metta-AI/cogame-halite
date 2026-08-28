@@ -100,7 +100,7 @@ Player containers read `COWORLD_PLAYER_WS_URL` (legacy alias
 |---|---|---|---|
 | `turn` | int | must equal the current turn | counted `wrong_turn`, treated as a miss |
 | `source` | string | `llm` \| `retry` \| `scripted` \| `fallback` | defaults to `scripted` |
-| `actions` | object | **≤ 256 entries**; keys ≤ **24 chars**; values ∈ `{NORTH,SOUTH,EAST,WEST,CONVERT,SPAWN}` | over 256 → first 256 by ascending uid kept; an unknown key/value, an id the seat does not own, or an action illegal for that asset kind → that entry dropped |
+| `actions` | object | **≤ 256 entries**; keys ≤ **24 chars**; values ∈ `{NORTH,SOUTH,EAST,WEST,CONVERT,SPAWN}` | over 256 → first 256 by ascending uid kept, **the rest dropped and counted** (logged, and tallied per seat in the engine's `dropped_over_cap` audit counter — not a `fallbacks` cause: the reply itself is used); an unknown key/value, an id the seat does not own, or an action illegal for that asset kind → that entry dropped |
 | `intent` | string | `mine` \| `expand` \| `raid` \| `defend` \| `hold` | dropped |
 | `note` | string | **≤ 140 runes**, spectator-facing | **truncated on a rune boundary** |
 

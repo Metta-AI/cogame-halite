@@ -58,6 +58,11 @@ class SeatState:
     strikes: int = 0
     dead: bool = False
     reported_dead: bool = False
+    #: Action entries this seat sent BEYOND the 256-entry cap and that were
+    #: therefore dropped (the design note's reply-cap table: "over 256 ->
+    #: first 256 by ascending uid kept, rest dropped **and counted**"). It is
+    #: an audit counter, not a fallback cause: the reply itself was used.
+    dropped_over_cap: int = 0
     fallbacks: dict[str, int] = field(
         default_factory=lambda: {c: 0 for c in defaults.FALLBACK_CAUSES}
     )
@@ -172,10 +177,28 @@ class Engine:
         if source not in defaults.SOURCES:
             source = "scripted"
 
+        # The reply cap: over 256 entries, the first 256 by ascending uid are
+        # kept and the rest are dropped AND COUNTED, so a policy that floods
+        # the wire shows up in the log and in `seats[s].dropped_over_cap`
+        # instead of being silently trimmed. It is an audit counter, not a
+        # fallback cause -- the reply itself is used.
+        ordered = sorted((raw or {}), key=_uid_key)
+        if len(ordered) > defaults.MAX_ACTIONS_PER_TURN:
+            over = len(ordered) - defaults.MAX_ACTIONS_PER_TURN
+            state = self.seats[seat]
+            first = state.dropped_over_cap == 0
+            state.dropped_over_cap += over
+            if first:
+                self.log(
+                    f"SEAT {seat} ({self._alias(seat)}) sent {len(ordered)} "
+                    f"action entries on turn {turn}; {over} over the "
+                    f"{defaults.MAX_ACTIONS_PER_TURN} cap were dropped "
+                    f"(counted in dropped_over_cap)"
+                )
+            ordered = ordered[: defaults.MAX_ACTIONS_PER_TURN]
+
         actions: dict[str, str] = {}
-        for key in sorted((raw or {}), key=_uid_key):
-            if len(actions) >= defaults.MAX_ACTIONS_PER_TURN:
-                break
+        for key in ordered:
             if not isinstance(key, str) or len(key) > defaults.MAX_ASSET_ID_CHARS:
                 continue
             value = (raw or {})[key]

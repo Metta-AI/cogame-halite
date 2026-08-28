@@ -174,6 +174,8 @@ class GameServer:
         self._failure_reported = False
         self._last_turn = 0
         self.started_at = PROCESS_STARTED_AT
+        #: The engine's seat states, kept for the end-of-episode audit log.
+        self._engine_seats: list = []
 
     # ------------------------------------------------------------- routing
 
@@ -338,6 +340,7 @@ class GameServer:
             # that starts after it bounds the episode but not the container.
             started_at=self.started_at,
         )
+        self._engine_seats = engine.seats
         for seat, state in zip(self.seats, engine.seats):
             state.policy = seat.policy
             state.label = seat.label
@@ -378,6 +381,13 @@ class GameServer:
         for seat, counts in enumerate(doc["fallbacks"]):
             if any(counts.values()):
                 print(f"  seat {seat} fallbacks: {counts}", file=sys.stderr)
+        for state in self._engine_seats:
+            if state.dropped_over_cap:
+                print(
+                    f"  seat {state.seat} dropped {state.dropped_over_cap} action "
+                    f"entries over the {defaults.MAX_ACTIONS_PER_TURN} cap",
+                    file=sys.stderr,
+                )
 
     async def _engine_player_failure(self, message: str, seat: int) -> None:
         await self._write_failure({"message": message, "failed_policy_index": seat})
