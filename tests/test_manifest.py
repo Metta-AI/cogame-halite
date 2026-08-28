@@ -68,6 +68,17 @@ def test_the_image_placeholder_is_derived_from_the_compose_service_name():
         assert image == IMAGE_PLACEHOLDER
 
 
+#: Which repo file each inline doc carries. The platform renders `game.docs`
+#: itself, so the docs are INLINE TEXT (`{"type":"text","value":...}`) rather
+#: than a `blob` URL a reader would have to follow; the test below is what
+#: keeps the two copies identical.
+DOC_SOURCES = {
+    ("readme",): "README.md",
+    ("pages", "rules.md"): "docs/RULES.md",
+    ("pages", "replay.md"): "docs/REPLAY.md",
+}
+
+
 def test_docs_and_protocols_are_object_shaped():
     """game.protocols.player/.global (like game.docs.readme) must be
     {"type":..., "value":...} objects, not bare strings (cogame-garble)."""
@@ -78,19 +89,46 @@ def test_docs_and_protocols_are_object_shaped():
         assert entry["type"] == "uri" and entry["value"].startswith("https://")
     readme = game["docs"]["readme"]
     assert isinstance(readme, dict) and set(readme) == {"type", "value"}
+    assert readme["type"] == "text"
     pages = game["docs"]["pages"]
     assert [p["id"] for p in pages] == ["rules.md", "replay.md"]
     for page in pages:
         assert set(page) == {"id", "title", "content"}
         assert set(page["content"]) == {"type", "value"}
+        assert page["content"]["type"] == "text"
+
+
+def test_the_inline_docs_are_the_repo_files_verbatim():
+    """Inline text can drift from the file it was copied out of; this is the
+    tripwire. Re-sync with:
+
+        python3 - <<'PY'
+        import json, pathlib
+        ...  # see the assertion message
+        PY
+    """
+    game = MANIFEST["game"]
+    pages = {page["id"]: page for page in game["docs"]["pages"]}
+    for key, path in DOC_SOURCES.items():
+        value = (
+            game["docs"]["readme"]["value"]
+            if key == ("readme",)
+            else pages[key[1]]["content"]["value"]
+        )
+        assert value == (REPO / path).read_text(), (
+            f"game.docs {'/'.join(key)} has drifted from {path}; copy the file's "
+            "text into coworld_manifest_template.json again"
+        )
 
 
 @pytest.mark.parametrize("path", ["README.md", "docs/RULES.md", "docs/REPLAY.md",
                                   "docs/PROTOCOL.md"])
 def test_every_referenced_doc_exists_in_the_repo(path):
-    assert (REPO / path).is_file(), f"the manifest points at {path}, which is missing"
-    blob = json.dumps(MANIFEST)
-    assert path in blob
+    """Every doc the manifest carries or points at is a real file here: the
+    three inline pages are copies of DOC_SOURCES, and PROTOCOL.md is the uri
+    `game.protocols` points at."""
+    assert (REPO / path).is_file(), f"the manifest names {path}, which is missing"
+    assert path in json.dumps(MANIFEST) or path in DOC_SOURCES.values()
 
 
 # ------------------------------------------------------------ config schema
