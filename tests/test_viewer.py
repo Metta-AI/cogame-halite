@@ -9,6 +9,7 @@ CI job is the gate.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -31,14 +32,45 @@ PAGE_TEXT = PAGE.read_text()
 
 
 # ------------------------------------------------------------- provenance
+#: sha256 of coworld-ctf's own `client/chrome_common.js` and
+#: `client/broadcast_core.js`, recorded from the read-only starter mount this
+#: repo copied them from (`/workspace/starters/coworld-ctf`). The mount does
+#: not exist on a GitHub runner, so without these digests the byte-for-byte
+#: pin was verified only in the sandbox and CI enforced nothing.
+CTF_CHROME_SHA256 = "7ace7287e0d19bf0fddb2362c55e4d76dfb44adcd4fbc8d1743b0557ced72f7c"
+CTF_CORE_SHA256 = "172c4680129d608fd687cfd86436b675eef32c8652be6afe5f3189dd20c5aa9c"
+
+
+@pytest.mark.parametrize(
+    "path,digest",
+    [("client/chrome_common.js", CTF_CHROME_SHA256),
+     ("client/broadcast_core.js", CTF_CORE_SHA256)],
+)
+def test_the_chrome_files_hash_to_the_starter_digests(path, digest):
+    """The byte-for-byte pin, enforced WHEREVER the tests run — including CI,
+    where there is no starter mount. Unused ctf helpers stay in the file,
+    unreferenced; deleting from a byte-for-byte copy is precisely what the pin
+    forbids, and a one-character edit moves the digest."""
+    actual = hashlib.sha256((REPO / path).read_bytes()).hexdigest()
+    assert actual == digest, (
+        f"{path} is no longer coworld-ctf's file byte for byte "
+        f"(sha256 {actual}, want {digest})"
+    )
+
+
 def test_the_chrome_and_the_compositor_are_the_starter_files_byte_for_byte():
-    """coworld-ctf's client/chrome_common.js and client/broadcast_core.js are
-    pinned BYTE-FOR-BYTE. Unused helpers stay in the file, unreferenced;
-    deleting from a byte-for-byte copy is precisely what the pin forbids."""
+    """And when the starter mount IS present, compare the bytes themselves —
+    which is also what proves the digests above were not copied from us."""
     if not CTF.is_dir():
         pytest.skip("the coworld-ctf mount is not present")
     assert CHROME.read_bytes() == (CTF / "client" / "chrome_common.js").read_bytes()
     assert CORE.read_bytes() == (CTF / "client" / "broadcast_core.js").read_bytes()
+    assert hashlib.sha256(
+        (CTF / "client" / "chrome_common.js").read_bytes()
+    ).hexdigest() == CTF_CHROME_SHA256
+    assert hashlib.sha256(
+        (CTF / "client" / "broadcast_core.js").read_bytes()
+    ).hexdigest() == CTF_CORE_SHA256
 
 
 def test_the_bootstrap_and_the_link_flags_come_from_the_same_starter():
