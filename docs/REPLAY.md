@@ -84,20 +84,28 @@ notes through the whole path and parses the result with `bytes.decode("utf-8")`
 index.html                      client/replay_broadcast.html
 chrome_common.js                coworld-ctf, BYTE-FOR-BYTE
 broadcast_core.js               coworld-ctf, BYTE-FOR-BYTE (loaded by the Worker only)
-static_replay.js                coworld-ctf + the three documented adaptations
-static_replay_worker.js         coworld-ctf + the three documented adaptations
+static_replay.js                coworld-ctf + the four documented adaptations
+static_replay_worker.js         coworld-ctf + the four documented adaptations
 halite_replay.{js,wasm,data}    replay-viewer/halite_replay.nim -> emscripten
 font.ttf                        the Rajdhani face the chrome's @font-face loads
 ```
 
-The three adaptations, the ones `cogame-factorio` already made to the same four
-files:
+The adaptations — the three `cogame-factorio` already made to the same four
+files, plus one this game forces:
 
 1. `start()` takes the replay bytes the page fetched (one fetch serves both the
    chrome and the renderer),
 2. the sim mismatch-tick attribute is gone — **nothing is re-simulated in the
    browser**; the wasm renderer draws the *recorded* per-turn state,
-3. the exported symbols are renamed `_halite_*`.
+3. the exported symbols are renamed `_halite_*`,
+4. the Worker's `importScripts` drops ctf's `wire_constants.js`. That file is
+   not in the ctf tree: ctf **generates** it during its own image build
+   (`tools/gen_wire_constants.nim` → `replay-viewer/dist/wire_constants.js`)
+   and it carries ctf's paintball wire enums, which nothing here reads.
+   Importing a file the bundle does not ship would 404 the Worker's boot on
+   every load. It is named in `static_replay.js`'s header, at the
+   `importScripts` call site, and in the design note's deviations appendix;
+   `tests/test_viewer.py` pins the call.
 
 The page owns playback (which turn) and tells the renderer on the sprite
 protocol's text channel: `s:<turn>` and `r:<0|1>` (the cargo-at-risk overlay).

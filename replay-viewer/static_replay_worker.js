@@ -2,11 +2,20 @@
 // wasm runtime and the OffscreenCanvas, feeds BroadcastCore the sprite packets
 // the renderer emits.
 //
-// Copied from coworld-ctf replay-viewer/static_replay_worker.js with exactly
-// the three adaptations cogame-factorio documented (see static_replay.js):
-// the page's fetched replay bytes are accepted on `init`, nothing is
-// re-simulated so the mismatch tick is gone, and every exported symbol is
-// renamed _halite_*.
+// Copied from coworld-ctf replay-viewer/static_replay_worker.js with the four
+// adaptations documented in static_replay.js's header and nowhere else: the
+// page's fetched replay bytes are accepted on `init`, nothing is re-simulated
+// so the mismatch tick is gone, every exported symbol is renamed _halite_*,
+// and the importScripts list below drops ctf's `wire_constants.js`.
+//
+// The fourth one, in full: ctf's worker does
+// `importScripts('./wire_constants.js', './broadcast_core.js', './ctf_replay.js')`.
+// `wire_constants.js` is not a file in the ctf tree at all — ctf GENERATES it
+// during its own image build (`tools/gen_wire_constants.nim` ->
+// `replay-viewer/dist/wire_constants.js`, from `src/ctf/wire_constants.nim`)
+// and it holds ctf's own paintball wire enums. There is nothing to copy and
+// nothing here that reads it, so importing it would 404 the worker's boot on
+// every load. tests/test_viewer.py pins the line.
 'use strict';
 
 // broadcast_core.js is shared with the native Window client and its vendored

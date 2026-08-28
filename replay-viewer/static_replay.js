@@ -3,14 +3,20 @@
 // API coworld-ctf's replay_broadcast.html drives (sendCommand, zoomAt,
 // setZoom, panBy, panTo, resetView, getTransform, ...).
 //
-// Copied from coworld-ctf replay-viewer/static_replay.js with exactly the
-// three adaptations cogame-factorio documented in the header of its own copy
-// of this file, and no others:
+// Copied from coworld-ctf replay-viewer/static_replay.js with the three
+// adaptations cogame-factorio documented in the header of its own copy of this
+// file, plus one this game forces, and no others:
 //   (1) `start()` takes the replay bytes the page fetched (it still falls back
 //       to ?replay= / /replay-data when the page hands it nothing),
 //   (2) the sim mismatch-tick attribute is gone — NOTHING is re-simulated in
 //       the browser; the wasm renderer draws the recorded per-turn state,
-//   (3) the exported symbols are renamed _halite_* (in the Worker half).
+//   (3) the exported symbols are renamed _halite_* (in the Worker half),
+//   (4) the Worker's `importScripts` list drops ctf's `wire_constants.js`.
+//       That file does not exist in the ctf tree: ctf generates it during its
+//       own image build (`tools/gen_wire_constants.nim`) and it carries ctf's
+//       paintball wire enums, which nothing here reads. Importing a file the
+//       bundle does not ship would 404 the Worker's boot on every load. The
+//       adaptation is named in static_replay_worker.js at the call site.
 //
 // The link flags in replay-viewer/config.nims and this bootstrap are a matched
 // pair and both come from coworld-ctf. Splicing one starter's shell onto

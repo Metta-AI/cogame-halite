@@ -92,7 +92,7 @@ def test_the_bootstrap_and_the_link_flags_come_from_the_same_starter():
     assert "_halite_load_replay" in exported and "_halite_frame" in exported
 
 
-def test_the_three_documented_adaptations_and_no_others():
+def test_the_four_documented_adaptations_and_no_others():
     static = STATIC_JS.read_text()
     worker = WORKER_JS.read_text()
     # (1) start() takes the replay bytes the page fetched.
@@ -103,7 +103,21 @@ def test_the_three_documented_adaptations_and_no_others():
     assert "data-replay-mismatch-tick" not in static
     # (3) the exported symbols are renamed _halite_*.
     assert "_ctf_" not in worker and "_ctf_" not in static
+    # (4) ctf's wire_constants.js is dropped from importScripts: ctf GENERATES
+    # that file in its own image build (tools/gen_wire_constants.nim) and it
+    # carries ctf's paintball wire enums, so there is nothing to copy and
+    # importing it would 404 the Worker's boot. Named at the call site and in
+    # static_replay.js's header, per the design note's deviations appendix.
     assert "importScripts('./broadcast_core.js', './halite_replay.js');" in worker
+    calls = re.findall(r"^importScripts\(.*$", worker, flags=re.M)
+    assert calls == ["importScripts('./broadcast_core.js', './halite_replay.js');"], (
+        "the bundle ships no wire_constants.js, so importing it would 404 the "
+        f"Worker's boot: {calls}"
+    )
+    assert "wire_constants.js" in worker, (
+        "the dropped import must be documented where it was dropped"
+    )
+    assert "(4)" in static, "the fourth adaptation must be in the header list"
     # The failure marker on <html> is KEPT: without it a deadlocked bundle is
     # indistinguishable from a slow one.
     assert "data-replay-error" in static
