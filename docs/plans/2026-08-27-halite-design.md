@@ -1169,7 +1169,13 @@ built repo does something else, each with the reason it had to. It is part of th
    the anchor at import a process older than the hard stop settled its first episode at turn 0 with
    `reason = "deadline"`. Worst case from the episode's start:
    660 (hard stop) + 18 (one in-flight directive turn) + 20 (artifacts) + 20 (shutdown grace) =
-   **718 s**, asserted by a test. The `results.reason` mapping is unchanged.
+   **718 s**, asserted by
+   `tests/test_server.py::test_the_worst_case_container_time_fits_inside_the_platform_pin`, which
+   also pins the two assumptions the sum rests on: the in-flight turn is ONE deadline (the engine's
+   observe writes are bounded and share the turn's budget with the replies, so a socket that will
+   not drain cannot make it two) and the directive spacing floor cannot add to it (it is only slept
+   while the budget guard is off, and guard + spacing + deadline is inside the hard stop). The
+   `results.reason` mapping is unchanged.
 6. **`game.docs` carries the doc text inline** (`{"type":"text","value":…}`) rather than the starter's
    `blob` URLs; §Packaging pins the *object* shape and the platform's schema accepts both forms, and
    the inline form is what checklist item 10 spells out. `game.protocols` keeps the `uri` form the

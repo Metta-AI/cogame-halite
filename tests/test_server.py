@@ -296,8 +296,13 @@ async def test_an_episode_in_an_old_process_still_starts_with_a_full_budget(monk
 
 def test_the_worst_case_container_time_fits_inside_the_platform_pin():
     """720 s = 60% of the platform's 1200 s episode timeout. Worst case, from
-    process start: the hard stop, one in-flight directive turn, the artifact
-    phase and the shutdown grace."""
+    the instant the episode begins: the hard stop, one in-flight directive
+    turn, the artifact phase and the shutdown grace.
+
+    Every term is read from the constant that enforces it, and the two
+    assumptions the sum rests on are asserted rather than assumed: the
+    in-flight turn is ONE deadline, and the directive spacing floor cannot add
+    to it."""
     from cogame_halite.server import ARTIFACT_WRITE_BUDGET_SECONDS
 
     pin = defaults.PLATFORM_EPISODE_TIMEOUT_MINUTES * 60 * 0.6
@@ -308,6 +313,7 @@ def test_the_worst_case_container_time_fits_inside_the_platform_pin():
         + SHUTDOWN_GRACE_SECONDS
     )
     assert pin == 720
+    assert worst == 718
     assert worst <= pin, f"worst modelled container time {worst}s exceeds the {pin}s pin"
     # And the lobby is INSIDE the hard stop, not added to it.
     assert (
@@ -315,6 +321,27 @@ def test_the_worst_case_container_time_fits_inside_the_platform_pin():
         < defaults.DEFAULT_BUDGET_GUARD_SECONDS
         < defaults.DEFAULT_WALL_CLOCK_BUDGET_SECONDS
     )
+
+    # Assumption 1: the in-flight turn costs ONE deadline. The engine's observe
+    # writes are bounded and share the turn's budget with the replies (r2-F2),
+    # so a socket that will not drain cannot add a second deadline to the turn
+    # that is in flight when the hard stop trips.
+    engine_source = (REPO / "server" / "cogame_halite" / "engine.py").read_text()
+    assert "budget = deadline_ms / 1000.0" in engine_source
+    assert "asyncio.wait_for(state.link.send(frame), budget)" in engine_source
+    assert "timeout=budget" in engine_source
+
+    # Assumption 2: the directive spacing floor never adds to that turn. It is
+    # only slept while the budget guard is OFF (past the guard no seat is asked
+    # and no batch is paced), so the last paced turn opens before the guard and
+    # is over well inside the hard stop.
+    assert (
+        defaults.DEFAULT_BUDGET_GUARD_SECONDS
+        + defaults.DEFAULT_DIRECTIVE_SPACING_MS / 1000.0
+        + defaults.DEFAULT_DIRECTIVE_DEADLINE_MS / 1000.0
+        <= defaults.DEFAULT_WALL_CLOCK_BUDGET_SECONDS
+    ), "a spaced directive turn can still be open when the hard stop trips"
+    assert "if not guard" in engine_source, "the guard empties `reachable`"
 
 
 async def test_a_hanging_artifact_write_cannot_outlive_its_budget(monkeypatch, tmp_path):

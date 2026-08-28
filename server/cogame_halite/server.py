@@ -66,7 +66,11 @@ SHUTDOWN_GRACE_SECONDS = 20.0
 #:                                   `run_episode` takes, so the <=120 s lobby
 #:                                   is inside it)
 #:   + one in-flight turn    18 s   (the stop is checked at a turn boundary and
-#:                                   a directive turn's deadline is 18 s)
+#:                                   a directive turn's deadline is 18 s: the
+#:                                   observe writes share that deadline with
+#:                                   the replies, and the spacing floor is only
+#:                                   slept while the guard is off, so neither
+#:                                   adds a second one)
 #:   + artifacts             20 s   (ARTIFACT_WRITE_BUDGET_SECONDS, below)
 #:   + shutdown grace        20 s   (SHUTDOWN_GRACE_SECONDS)
 #:   ------------------------------
