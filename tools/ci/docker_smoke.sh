@@ -9,7 +9,8 @@
 # Starts ONE game container plus one player container per seat on a shared
 # user-defined docker network, driving them with the certification fixture out
 # of coworld_manifest_template.json (same seat mix the certifier will use), and
-# asserts the game exits 0 having written results.json and a replay.
+# asserts the game exits 0 having written results.json and a replay whose
+# `reason` is "complete" and whose keys are exactly the closed results set.
 #
 # It is the containerised twin of the local tmp/run_e2e.sh: same COGAME_*
 # contract, same one-player-process-per-slot shape, but every process runs in
@@ -296,16 +297,40 @@ except Exception as exc:
 if not isinstance(results, dict) or not results:
     raise SystemExit(f"results.json is not a non-empty object: {results!r}")
 
-for key in ("names", "scores"):
-    if key in results:
-        if len(results[key]) != seats:
-            raise SystemExit(f"results.{key} has {len(results[key])} entries, expected {seats}")
-    else:
-        print(f"WARNING: results.json has no '{key}' key")
+# The CLOSED results key set — the third of the three copies
+# (server/cogame_halite/results.py::RESULTS_KEYS and the manifest's
+# results_schema are the other two). tests/test_results.py asserts all three
+# are the same list, in the same order, so this cannot drift alone.
+RESULTS_KEYS = (
+    "names", "aliases", "scores", "placement", "ranking", "win", "winner",
+    "reason", "end_rule", "final_turn", "seed", "banked", "ships", "yards",
+    "mined", "stolen", "collisions_won", "collisions_lost", "eliminated_turn",
+    "llm_turns", "fallbacks", "dead_seats", "stop_detail",
+)
+if tuple(results) != RESULTS_KEYS:
+    missing = [k for k in RESULTS_KEYS if k not in results]
+    extra = [k for k in results if k not in RESULTS_KEYS]
+    raise SystemExit(
+        "results.json is not the closed key set: "
+        f"missing={missing} extra={extra} order_ok={sorted(results) == sorted(RESULTS_KEYS)}"
+    )
 
-reason = results.get("reason") or results.get("end_reason")
-if reason is not None:
-    print(f"episode end reason: {reason}")
+for key in ("names", "aliases", "scores", "placement", "ranking", "win",
+            "banked", "ships", "yards", "llm_turns", "fallbacks", "dead_seats"):
+    if len(results[key]) != seats:
+        raise SystemExit(f"results.{key} has {len(results[key])} entries, expected {seats}")
+
+# The healthy value. A `deadline` smoke means the episode ran out of wall
+# clock and a `fault` means the sim tripped: both are build failures here
+# (design note §"End conditions": "docker_smoke.sh requires it" / "fails the
+# build if the smoke episode reports [fault]").
+reason = results["reason"]
+print(f"episode end reason: {reason} (end_rule={results['end_rule']})")
+if reason != "complete":
+    raise SystemExit(
+        f"smoke episode ended reason={reason!r} end_rule={results['end_rule']!r} "
+        f"stop_detail={results.get('stop_detail')!r}, want 'complete'"
+    )
 
 replay_path = work / "replay.json"
 if not replay_path.exists() or replay_path.stat().st_size == 0:

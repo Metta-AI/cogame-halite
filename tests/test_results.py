@@ -56,13 +56,31 @@ def test_the_manifest_results_schema_is_the_same_closed_set():
 
 
 def test_the_docker_smoke_expected_key_set_is_the_same():
-    """Three places, one list. ci.yml's smoke assertion imports RESULTS_KEYS
-    from the code, so the third place cannot drift."""
+    """Three places, one list. `docker_smoke.sh` carries the third copy
+    literally (it runs on a host that may not have the package importable) and
+    ci.yml's own assertion imports RESULTS_KEYS from the code, so neither can
+    drift alone."""
     workflow = (REPO / ".github" / "workflows" / "ci.yml").read_text()
     assert "from cogame_halite.results import RESULTS_KEYS" in workflow
     assert "tuple(doc) != RESULTS_KEYS" in workflow
     smoke = (REPO / "tools" / "ci" / "docker_smoke.sh").read_text()
-    assert 'reason = results.get("reason")' in smoke
+    literal = re.search(r"RESULTS_KEYS = \(\n(.*?)\n\)\n", smoke, flags=re.S)
+    assert literal, "docker_smoke.sh must carry the closed key set literally"
+    keys = tuple(re.findall(r'"([a-z_]+)"', literal.group(1)))
+    assert keys == RESULTS_KEYS, (
+        "tools/ci/docker_smoke.sh and results.py disagree:\n"
+        f"  smoke {keys}\n  code  {RESULTS_KEYS}"
+    )
+    assert "tuple(results) != RESULTS_KEYS" in smoke, "and it must ASSERT it"
+
+
+def test_the_docker_smoke_requires_a_complete_episode():
+    """The design note's §Tests 14: the smoke script itself asserts
+    `reason == "complete"`. Leaving that to a ci.yml step means the local
+    invocation AGENTS.md documents checks neither."""
+    smoke = (REPO / "tools" / "ci" / "docker_smoke.sh").read_text()
+    assert 'reason = results["reason"]' in smoke
+    assert 'if reason != "complete":' in smoke
 
 
 def test_the_reason_enum_is_closed_in_both_places():
