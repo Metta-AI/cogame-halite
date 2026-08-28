@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -22,7 +23,14 @@ REPO = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
-    for key in ("PLAYER_PROMPT", "PLAYER_SCRIPTED", "USE_BEDROCK", "ANTHROPIC_API_KEY"):
+    for key in (
+        "PLAYER_PROMPT",
+        "PLAYER_SCRIPTED",
+        "USE_BEDROCK",
+        "ANTHROPIC_API_KEY",
+        "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
+        "AWS_BEARER_TOKEN_BEDROCK",
+    ):
         monkeypatch.delenv(key, raising=False)
 
 
@@ -69,6 +77,98 @@ def test_every_llm_policy_in_policies_json_carries_use_bedrock():
         env = row["env"]
         if "PLAYER_PROMPT" in env:
             assert env.get("USE_BEDROCK") == "true", f"{row['name']} has no USE_BEDROCK"
+
+
+# ------------------------------------------------------------- LLM transport
+def test_use_bedrock_targets_the_episode_sidecar_never_aws(monkeypatch):
+    """The halite 0.1.0 scar (phase-60 check 4): the provider built
+    ``AnthropicBedrock()``, which signs for the real AWS Bedrock endpoint. The
+    player pod has no AWS credentials, so every call came back
+    ``403 Invalid API Key format`` and all 40 champion notes were scripted. The
+    platform's transport is the loopback episode sidecar."""
+    monkeypatch.setenv("USE_BEDROCK", "true")
+    client = llm.Provider()._ensure()
+    assert isinstance(client, llm.BedrockSidecar)
+    assert client.invoke_url(llm.MODEL) == (
+        "http://127.0.0.1:9100/model/"
+        "us.anthropic.claude-haiku-4-5-20251001-v1:0/invoke"
+    )
+    assert "AnthropicBedrock(" not in (REPO / "players" / "llm.py").read_text(), (
+        "the SDK's Bedrock client cannot reach the sidecar"
+    )
+
+
+def test_the_sidecar_endpoint_is_overridable(monkeypatch):
+    monkeypatch.setenv("USE_BEDROCK", "true")
+    monkeypatch.setenv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "http://10.0.0.9:8080/")
+    client = llm.Provider()._ensure()
+    assert client.invoke_url("m") == "http://10.0.0.9:8080/model/m/invoke"
+
+
+def test_without_use_bedrock_an_api_key_still_builds_the_anthropic_client(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    provider = llm.Provider()
+    assert provider.available is True
+    client = provider._ensure()
+    assert not isinstance(client, llm.BedrockSidecar)
+    assert type(client).__name__ == "Anthropic"
+
+
+async def test_a_bedrock_completion_posts_invoke_to_the_sidecar(monkeypatch):
+    """End to end over real HTTP: the URL, the bearer header and the
+    ``anthropic_version`` body the sidecar requires."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    seen: dict = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802 - stdlib naming
+            seen["path"] = self.path
+            seen["authorization"] = self.headers.get("authorization")
+            seen["body"] = json.loads(
+                self.rfile.read(int(self.headers["content-length"])).decode()
+            )
+            payload = json.dumps(
+                {"stop_reason": "end_turn", "content": [{"type": "text", "text": "{}"}]}
+            ).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address[0], server.server_address[1]
+        monkeypatch.setenv("USE_BEDROCK", "true")
+        monkeypatch.setenv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", f"http://{host}:{port}")
+        monkeypatch.setenv("AWS_BEARER_TOKEN_BEDROCK", "sidecar-token")
+        text = await llm.Provider().complete("prompt", 5.0)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert text == "{}"
+    assert seen["path"] == f"/model/{llm.MODEL}/invoke"
+    assert seen["authorization"] == "Bearer sidecar-token"
+    assert seen["body"]["anthropic_version"] == "bedrock-2023-05-31"
+    assert seen["body"]["max_tokens"] == llm.MAX_TOKENS
+    assert seen["body"]["messages"] == [{"role": "user", "content": "prompt"}]
+
+
+async def test_a_sidecar_error_names_the_url_and_stays_within_the_deadline(monkeypatch):
+    monkeypatch.setenv("USE_BEDROCK", "true")
+    # A closed loopback port: connection refused, not a hang.
+    monkeypatch.setenv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "http://127.0.0.1:1")
+    with pytest.raises(RuntimeError) as excinfo:
+        await llm.Provider().complete("prompt", 5.0)
+    assert f"POST http://127.0.0.1:1/model/{llm.MODEL}/invoke" in str(excinfo.value)
 
 
 # --------------------------------------------------------------- the model

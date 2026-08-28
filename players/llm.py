@@ -7,9 +7,17 @@ and it is what makes 20 LLM batches cover 1 600 asset-turns.
 Providers, in order of preference:
 
 * **Bedrock** (``USE_BEDROCK=true``): the platform attaches a Bedrock sidecar to
-  the player pod. Every LLM policy's ``env`` in ``tools/ci/policies.json`` must
-  carry ``USE_BEDROCK: "true"`` — ``PLAYER_PROMPT`` alone gets no sidecar and
-  the seat silently plays scripted (the cogolf 2026-08-24 scar).
+  the player pod and the calls go to **that sidecar**
+  (``http://127.0.0.1:9100/model/<model>/invoke``, bearer
+  ``AWS_BEARER_TOKEN_BEDROCK``, endpoint overridable with
+  ``AWS_ENDPOINT_URL_BEDROCK_RUNTIME``) over plain HTTP. The SDK's
+  ``AnthropicBedrock`` client is *not* usable there: it signs for the real AWS
+  endpoint, the pod has no AWS credentials, and every call comes back
+  ``403 Invalid API Key format`` so every seat plays scripted (the halite
+  0.1.0 scar, phase-60 check 4). Every LLM policy's ``env`` in
+  ``tools/ci/policies.json`` must carry ``USE_BEDROCK: "true"`` —
+  ``PLAYER_PROMPT`` alone gets no sidecar and the seat silently plays scripted
+  (the cogolf 2026-08-24 scar).
 * **Anthropic API** (``ANTHROPIC_API_KEY``).
 
 Model ``us.anthropic.claude-haiku-4-5-20251001-v1:0``, ``max_tokens`` **900**
@@ -39,6 +47,8 @@ MODEL = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 MAX_TOKENS = 900
 ATTEMPT1_TIMEOUT_SECONDS = 12.0
 RETRY_TIMEOUT_SECONDS = 5.0
+SIDECAR_ENDPOINT = "http://127.0.0.1:9100"
+BEDROCK_ANTHROPIC_VERSION = "bedrock-2023-05-31"
 
 SYSTEM_PROMPT = (
     "You command a fleet in Halite IV: four fleets mine a 21x21 wrap-around "
@@ -228,6 +238,64 @@ class LLMUnavailable(RuntimeError):
     """No provider is configured or reachable."""
 
 
+class BedrockSidecar:
+    """``InvokeModel`` over the episode's Bedrock sidecar.
+
+    The sidecar speaks plain HTTP on loopback and needs no AWS signing, so this
+    is stdlib ``urllib`` and not ``anthropic.AnthropicBedrock`` (which signs for
+    the real AWS endpoint the pod cannot reach). It exposes the
+    ``client.messages.create(...)`` shape so both transports share one call site.
+    """
+
+    class _Block:
+        def __init__(self, raw: dict) -> None:
+            self.type = raw.get("type", "")
+            self.text = raw.get("text", "")
+
+    class _Message:
+        def __init__(self, raw: dict) -> None:
+            self.stop_reason = raw.get("stop_reason")
+            self.content = [BedrockSidecar._Block(b) for b in raw.get("content") or []]
+
+    def __init__(self) -> None:
+        endpoint = os.environ.get("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "").strip()
+        self.endpoint = (endpoint or SIDECAR_ENDPOINT).rstrip("/")
+        self.token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK", "").strip()
+        self.messages = self  # so `client.messages.create(...)` works
+
+    def invoke_url(self, model: str) -> str:
+        return f"{self.endpoint}/model/{model}/invoke"
+
+    def create(self, *, model: str, max_tokens: int, system: str, messages: list, timeout: float):
+        import urllib.request  # noqa: PLC0415
+
+        url = self.invoke_url(model)
+        body = {
+            "anthropic_version": BEDROCK_ANTHROPIC_VERSION,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": messages,
+        }
+        headers = {"content-type": "application/json", "accept": "application/json"}
+        if self.token:
+            headers["authorization"] = f"Bearer {self.token}"
+        request = urllib.request.Request(
+            url, data=json.dumps(body).encode(), method="POST", headers=headers
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return self._Message(json.loads(response.read().decode()))
+        except Exception as exc:  # noqa: BLE001 - one message shape for every failure
+            detail = ""
+            reader = getattr(exc, "read", None)
+            if reader is not None:
+                try:
+                    detail = reader().decode(errors="replace")[:200]
+                except Exception:  # noqa: BLE001
+                    detail = ""
+            raise RuntimeError(f"POST {url}: {exc!r} {detail}".strip()) from exc
+
+
 class Provider:
     """Thin Bedrock / Anthropic client. Imports its SDK lazily."""
 
@@ -249,10 +317,9 @@ class Provider:
         if self._client is not None:
             return self._client
         if self.use_bedrock:
-            from anthropic import AnthropicBedrock  # noqa: PLC0415
-
-            self._client = AnthropicBedrock()
+            self._client = BedrockSidecar()
             self._kind = "bedrock"
+            log(f"LLM bedrock transport, url {self._client.invoke_url(MODEL)}")
         elif self.api_key:
             from anthropic import Anthropic  # noqa: PLC0415
 
@@ -262,13 +329,14 @@ class Provider:
             raise LLMUnavailable("no LLM provider configured")
         return self._client
 
-    def _call(self, prompt: str) -> str:
+    def _call(self, prompt: str, timeout: float) -> str:
         client = self._ensure()
         message = client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
+            timeout=timeout,
         )
         if getattr(message, "stop_reason", "") == "max_tokens":
             log("LLM reply was cut off at max_tokens")
@@ -281,7 +349,7 @@ class Provider:
 
     async def complete(self, prompt: str, timeout: float) -> str:
         """One bounded call. Raises on timeout or provider error."""
-        return await asyncio.wait_for(asyncio.to_thread(self._call, prompt), timeout)
+        return await asyncio.wait_for(asyncio.to_thread(self._call, prompt, timeout), timeout)
 
 
 class DirectiveClient:
