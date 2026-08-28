@@ -410,3 +410,26 @@ def test_ci_gates_the_renderer_fixture_on_a_non_vacuous_text_count():
     assert "--soak 8" in ci
     assert 'text["total"] < 12' in ci
     assert 'text["never_inside"]' in ci
+
+
+def test_every_drawn_string_is_a_dom_string_so_the_fixture_is_the_text_gate():
+    """`viewer_smoke.mjs` hooks `CanvasRenderingContext2D.fillText`, and the
+    two replay passes report `canvas_text.total == 0`. That is not a missed
+    hook: **this viewer draws no canvas text at all.** The wasm renderer emits
+    sprites, the Worker's compositor blits pixels into an OffscreenCanvas, and
+    every string a spectator reads — plates, clock, feed, notes, endcard — is a
+    DOM node in the shipped page. `tools/ci/renderer_fixture.html` is therefore
+    the only pass that can measure text (it transcribes the page's own DOM runs
+    to a canvas at their measured geometry), which is why ci.yml gates it on a
+    non-vacuous count. This asserts the premise, so `total: 0` stays a fact
+    about the architecture rather than an unexplained zero."""
+    for path in ("client/replay_broadcast.html", "client/chrome_common.js",
+                 "client/broadcast_core.js", "replay-viewer/static_replay.js",
+                 "replay-viewer/static_replay_worker.js",
+                 "replay-viewer/halite_replay.nim"):
+        text = (REPO / path).read_text()
+        assert "fillText" not in text and "strokeText" not in text, (
+            f"{path} draws canvas text: it would be invisible to the renderer "
+            "fixture and only partly visible to viewer_smoke.mjs"
+        )
+    assert "ctx.fillText(run.text" in (REPO / "tools" / "ci" / "renderer_fixture.html").read_text()

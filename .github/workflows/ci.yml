@@ -234,6 +234,12 @@ jobs:
           # --strict-text-bounds: the board is a FIXED 21x21 arena that always
           # fits the frame (the design note drops the zoom bar for exactly that
           # reason), so a string drawn outside the canvas is a defect.
+          # This pass reports canvas_text.total == 0 BY CONSTRUCTION: the wasm
+          # renderer emits sprites, the Worker blits them into an
+          # OffscreenCanvas, and every string a spectator reads is a DOM node.
+          # No file in the viewer calls fillText (tests/test_viewer.py asserts
+          # that), so the renderer-fixture pass below -- which transcribes the
+          # page's own DOM runs at their measured geometry -- is the text gate.
           # --soak 12: LOADING IS NOT PLAYING (cogball 0.1.4). The 120-turn CI
           # fixture plays for 15 s at 1x, which outlasts the soak.
           node tools/ci/viewer_smoke.mjs \
