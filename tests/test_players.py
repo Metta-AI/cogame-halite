@@ -148,10 +148,16 @@ def test_unknown_fields_are_dropped_and_missing_ones_inherit():
     assert not hasattr(out, "nonsense")
 
 
-def test_turn_zero_defaults_are_the_design_note_table():
+def test_turn_zero_defaults_are_the_tuned_baseline_table():
+    """The turn-0 directive every LLM seat starts from IS `tidewalker`, and
+    `tidewalker`'s three swept constants are the grid harness's choice, not the
+    design note's first guess: `docs/tuning/2026-08-28-micro-grid.md` (the old
+    `100/500/300` won 0 of 16 runoff episodes; this won 7). The unswept fields
+    are the note's — `stance` mine, `yards` 2, `focus` CENTER, `avoid` null."""
     d = micro.TIDEWALKER
     assert (d.stance, d.spawnUntil, d.yards, d.mineFloor, d.returnAt, d.focus, d.avoid) == (
-        "mine", 300, 2, 100, 500, "CENTER", None)
+        "mine", 200, 2, 200, 300, "CENTER", None)
+    assert micro.Directive() == d
 
 
 @pytest.mark.parametrize(

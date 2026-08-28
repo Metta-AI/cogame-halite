@@ -32,11 +32,17 @@ PATCH_RADIUS = 6
 
 @dataclass(frozen=True)
 class Directive:
+    #: The field defaults ARE `TIDEWALKER` and the turn-0 directive every LLM
+    #: seat starts from. `mineFloor`, `returnAt` and `spawnUntil` are the
+    #: winners of the grid sweep in `tools/tune/grid_search.py`, confirmed on
+    #: fresh seeds; the run that chose them is
+    #: `docs/tuning/2026-08-28-micro-grid.md`, and `tests/test_tuning.py`
+    #: asserts these values are the ones it selected.
     stance: str = "mine"
-    spawnUntil: int = 300
+    spawnUntil: int = 200
     yards: int = 2
-    mineFloor: int = 100
-    returnAt: int = 500
+    mineFloor: int = 200
+    returnAt: int = 300
     focus: str = "CENTER"
     avoid: str | None = None
     note: str = ""
@@ -59,8 +65,10 @@ TIDEWALKER = Directive()
 
 #: ``corsair`` — the same function with a raider's constants and one extra
 #: rule: hunting is always on and it chases a heavy enemy up to distance 4 even
-#: at ``stance != "raid"``.
-CORSAIR = Directive(stance="raid", spawnUntil=340, yards=2, mineFloor=150, returnAt=350)
+#: at ``stance != "raid"``. Its constants are the grid sweep's winner for this
+#: baseline (`docs/tuning/2026-08-28-micro-grid.md`); it keeps spawning 100
+#: turns longer than tidewalker, which is the axis the sweep separates them on.
+CORSAIR = Directive(stance="raid", spawnUntil=300, yards=2, mineFloor=200, returnAt=300)
 
 BASELINE_DIRECTIVES: dict[str, Directive] = {
     "tidewalker": TIDEWALKER,
