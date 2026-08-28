@@ -13,45 +13,55 @@
 
   Why it loads the SHIPPED page (particle-worlds, 2026-08-26): a fixture that
   re-implements the drawing proves nothing about the bundle. This one loads
-  dist/static-replay-viewer/index.html in an iframe with `?shim=1` -- the ONLY
-  thing shimmed is the wasm entry, so the page's own chrome, CSS and text path
-  run unchanged -- feeds it a replay whose every seat carries a FULL-CAP
-  140-rune note on many turns, and then TRANSCRIBES the page's own DOM text
-  runs onto a canvas at the measured geometry, so viewer_smoke.mjs's
-  fillText hook measures the real, shipped layout at THREE canvas sizes.
+  dist/static-replay-viewer/index.html in THREE iframes -- one per canvas size
+  -- with `?shim=1`, whose ONLY effect is to skip the wasm entry so the page's
+  own chrome, CSS and text path run unchanged. Each iframe is fed a replay
+  whose every seat carries a FULL-CAP 140-rune note on many turns, and the
+  fixture then TRANSCRIBES each page's own DOM text runs onto a canvas at the
+  measured geometry, so viewer_smoke.mjs's fillText hook measures the real,
+  shipped layout at three sizes.
+
+  THREE FIXED IFRAMES, NOT ONE RESIZED ONE. Resizing an iframe updates the
+  child's clientWidth immediately but redoes its line breaking on the CHILD's
+  own rendering lifecycle; measuring across that gap transcribes the wide
+  layout's line boxes into the narrow frame and reports the difference as
+  "text with nowhere to go". Every size gets its own frame, sized before it
+  ever loads, so there is no resize to race.
 
   Run (see .github/workflows/ci.yml):
     node tools/ci/viewer_smoke.mjs --url \
       "http://127.0.0.1:8731/renderer_fixture.html?replay=%2Fsmoke.replay" \
       --timeout 90 --strict-text-bounds --soak 8 --out dist/fixture
 
-  The soak is NOT decoration here. viewer_smoke.mjs accepts the bridge `ready`
+  The soak is NOT decoration. viewer_smoke.mjs accepts the bridge `ready`
   postMessage OR data-replay-loaded, whichever comes FIRST, and the shipped
-  page inside the iframe posts `ready` within ~300 ms -- before this fixture
-  has transcribed anything. Without the soak the run ended with
+  page inside an iframe posts `ready` within ~300 ms -- before this fixture has
+  transcribed anything. Without the soak the run ended with
   `canvas_text.total == 0` and the text gate was vacuous. The soak keeps the
-  page alive while the three passes run, and ci.yml then asserts the count is
+  page alive while the passes run, and ci.yml then asserts the count is
   non-zero.
 -->
 <style>
 @font-face {
   /* The same face the bundle's chrome uses, so the parent document resolves
-     the same family list the iframe does. */
+     the same family list the iframes do. */
   font-family: 'rajdhani';
   src: url('./font.ttf') format('truetype');
   font-display: block;
 }
   html, body { margin: 0; padding: 0; background: #0b0805; color: #f2e8d8;
-               font: 12px/1.4 ui-monospace, Menlo, monospace; }
-  #frame-box { border: 0; display: block; }
-  #sizes { position: fixed; left: 0; bottom: 0; opacity: 0.9; }
+               font: 12px/1.4 ui-monospace, Menlo, monospace; overflow: hidden; }
+  /* The three frames overlap at the origin: each still gets a full, independent
+     layout at its own fixed size, and the parent viewport stays clean. */
+  iframe { position: absolute; left: 0; top: 0; border: 0; display: block; }
+  #sizes { position: fixed; left: 0; bottom: 0; z-index: 5; }
   canvas { display: block; }
-  #mirror { position: fixed; right: 0; top: 0; padding: 6px; }
+  #mirror { position: fixed; right: 0; top: 0; padding: 6px; z-index: 6; }
   #mirror div { max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 </head>
 <body>
-<iframe id="frame-box" width="1240" height="700" title="cogame-halite replay chrome"></iframe>
+<div id="frames"></div>
 <div id="sizes"></div>
 <div id="mirror">
   <div id="clock"></div>
@@ -73,12 +83,12 @@
     return Array.from(body).slice(0, CAP).join('');
   }
 
+  var SIZES = [[1240, 700], [900, 560], [360, 640]];
   var mirrorIds = ['clock', 'tick-clock', 'scorebug', 'status'];
-  var frame = document.getElementById('frame-box');
-  var sizes = [[1240, 700], [900, 560], [360, 640]];
-  var sizeIndex = 0;
+  var frames = [];
   var canvases = [];
   var failed = false;
+  var announced = false;
 
   function fail(message) {
     if (failed) return;
@@ -86,12 +96,20 @@
     document.documentElement.setAttribute('data-replay-error', String(message));
   }
 
-  sizes.forEach(function (wh) {
+  SIZES.forEach(function (wh, index) {
+    var frame = document.createElement('iframe');
+    frame.width = wh[0];
+    frame.height = wh[1];
+    frame.title = 'cogame-halite replay chrome at ' + wh[0] + 'x' + wh[1];
+    frame.style.zIndex = String(SIZES.length - index);
+    document.getElementById('frames').appendChild(frame);
+    frames.push(frame);
+
     var canvas = document.createElement('canvas');
     canvas.width = wh[0];
     canvas.height = wh[1];
-    canvas.style.width = '120px';
-    canvas.style.height = Math.round(120 * wh[1] / wh[0]) + 'px';
+    canvas.style.width = '110px';
+    canvas.style.height = Math.round(110 * wh[1] / wh[0]) + 'px';
     document.getElementById('sizes').appendChild(canvas);
     canvases.push(canvas);
   });
@@ -102,15 +120,15 @@
   // one impossible single-line run -- otherwise every wrapped element is a
   // false positive and the gate is worthless in the other direction.
   function lineRuns(root) {
-    const doc = root.ownerDocument;
-    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const range = doc.createRange();
-    const out = [];
-    let node;
+    var doc = root.ownerDocument;
+    var walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    var range = doc.createRange();
+    var out = [];
+    var node;
     while ((node = walker.nextNode())) {
-      const data = node.data;
+      var data = node.data;
       if (!data || !data.trim()) continue;
-      const style = doc.defaultView.getComputedStyle(node.parentElement);
+      var style = doc.defaultView.getComputedStyle(node.parentElement);
       if (style.display === 'none' || style.visibility === 'hidden') continue;
       // An element that asked for `text-overflow: ellipsis` DRAWS the visible
       // prefix and an ellipsis; the characters past the clip are laid out but
@@ -118,81 +136,81 @@
       // not have. Everything else is transcribed whole -- a row silently cut
       // by an overflow:hidden band with no ellipsis IS a defect and stays
       // visible to the gate.
-      const clip = style.textOverflow === 'ellipsis'
+      var clip = style.textOverflow === 'ellipsis'
         ? node.parentElement.getBoundingClientRect()
         : null;
-      let start = 0;
-      let top = null;
-      let left = 0;
-      let right = 0;
-      let bottom = 0;
-      for (let i = 0; i < data.length; i++) {
+      var start = 0;
+      var top = null;
+      var left = 0;
+      var right = 0;
+      var bottom = 0;
+      for (var i = 0; i < data.length; i++) {
         range.setStart(node, i);
         range.setEnd(node, i + 1);
-        const box = range.getBoundingClientRect();
+        var box = range.getBoundingClientRect();
         if (!box.width && !box.height) continue;
         if (clip && (box.right > clip.right + 1 || box.left < clip.left - 1)) continue;
-        const rowTop = Math.round(box.top);
-        const ink = data[i].trim().length > 0;
+        var rowTop = Math.round(box.top);
+        // Trailing whitespace is laid out but never painted, and Chromium lets
+        // it hang past the content box -- it must not extend the run.
+        var ink = data[i].trim().length > 0;
         if (top === null) {
-          top = rowTop; left = box.left; right = ink ? box.right : box.left; bottom = box.bottom; start = i;
+          top = rowTop; left = box.left; right = ink ? box.right : box.left;
+          bottom = box.bottom; start = i;
         } else if (rowTop !== top) {
-          out.push({ text: data.slice(start, i), left, right, bottom, style });
-          top = rowTop; left = box.left; right = ink ? box.right : box.left; bottom = box.bottom; start = i;
+          out.push({ text: data.slice(start, i), left: left, right: right, bottom: bottom, style: style });
+          top = rowTop; left = box.left; right = ink ? box.right : box.left;
+          bottom = box.bottom; start = i;
         } else {
-          // Trailing whitespace is laid out but never painted, and Chromium
-          // lets it hang past the content box -- it must not extend the run.
           if (ink) right = Math.max(right, box.right);
           bottom = Math.max(bottom, box.bottom);
         }
       }
-      if (top !== null) out.push({ text: data.slice(start), left, right, bottom, style });
+      if (top !== null) {
+        out.push({ text: data.slice(start), left: left, right: right, bottom: bottom, style: style });
+      }
     }
     return out;
   }
 
-  // Transcribe the page's own text runs onto the canvas at MEASURED geometry.
-  // A run laid out at a negative coordinate, or past the frame, lands outside
-  // the canvas and viewer_smoke.mjs's --strict-text-bounds fails the job.
+  // Transcribe one page's own text runs onto its canvas at MEASURED geometry.
+  // The canvas IS that iframe's layout viewport, read from INSIDE the iframe
+  // (documentElement.clientWidth), because every range rect above is in the
+  // inner coordinate space. A run outside the canvas therefore means the page
+  // genuinely laid that text outside its own frame.
   function transcribe(doc, canvas) {
-    // The canvas IS the iframe's own LAYOUT VIEWPORT, 1:1 -- read from inside
-    // the iframe (documentElement.clientWidth), not from the parent's rect of
-    // the <iframe> element. Those two can disagree, and every range rect this
-    // function measures is in the INNER coordinate space, so sizing the canvas
-    // from the outer rect silently transcribes one layout into another
-    // layout's frame and reports the difference as text with nowhere to go.
-    // At 1:1 in the right space, "outside the canvas" means the page genuinely
-    // laid that text outside its own frame -- the only thing worth gating.
-    const view = doc.documentElement;
-    canvas.width = Math.max(1, view.clientWidth);
-    canvas.height = Math.max(1, view.clientHeight);
-    canvas.style.width = '120px';
-    canvas.style.height = Math.round(120 * canvas.height / canvas.width) + 'px';
-    const ctx = canvas.getContext('2d');
+    var view = doc.documentElement;
+    if (canvas.width !== view.clientWidth || canvas.height !== view.clientHeight) {
+      canvas.width = Math.max(1, view.clientWidth);
+      canvas.height = Math.max(1, view.clientHeight);
+      canvas.style.width = '110px';
+      canvas.style.height = Math.round(110 * canvas.height / canvas.width) + 'px';
+    }
+    var ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#f2e8d8';
     ctx.textBaseline = 'alphabetic';
-    let drawn = 0;
-    for (const host of ['#killfeed', '#scorebug', '#clock', '#endcard', '#transport']) {
-      const root = doc.querySelector(host);
-      if (!root) continue;
-      for (const run of lineRuns(root)) {
-        const px = parseFloat(run.style.fontSize) || 12;
-        const family = run.style.fontFamily || 'sans-serif';
+    var drawn = 0;
+    ['#killfeed', '#scorebug', '#clock', '#endcard', '#transport'].forEach(function (host) {
+      var root = doc.querySelector(host);
+      if (!root) return;
+      lineRuns(root).forEach(function (run) {
+        var px = parseFloat(run.style.fontSize) || 12;
+        var family = run.style.fontFamily || 'sans-serif';
         // The canvas must MEASURE the run exactly as the page LAID IT OUT.
-        // The parent document is not the bundle, so it may resolve a different
-        // face for the same family list and measureText would then overstate
-        // every run by 5-20% -- which reads as "text with nowhere to go" for
-        // every right-anchored line in the feed. Scale the font so the drawn
-        // width equals the width the browser actually used.
+        // The parent document may resolve a different face for the same family
+        // list, and measureText would then overstate every run by 5-20% --
+        // which reads as "text with nowhere to go" for every right-anchored
+        // line in the feed. Scale the font so the drawn width equals the width
+        // the browser actually used.
         ctx.font = px + 'px ' + family;
-        const measured = ctx.measureText(run.text).width || 1;
-        const laidOut = Math.max(1, run.right - run.left);
+        var measured = ctx.measureText(run.text).width || 1;
+        var laidOut = Math.max(1, run.right - run.left);
         ctx.font = Math.max(1, px * laidOut / measured) + 'px ' + family;
         ctx.fillText(run.text, run.left, run.bottom);
         drawn++;
-      }
-    }
+      });
+    });
     return drawn;
   }
 
@@ -231,89 +249,48 @@
         }
       }
       var url = URL.createObjectURL(new Blob([JSON.stringify(doc)], { type: 'application/json' }));
-      frame.src = './index.html?shim=1&replay=' + encodeURIComponent(url);
+      frames.forEach(function (frame) {
+        frame.src = './index.html?shim=1&replay=' + encodeURIComponent(url);
+      });
     })
     .catch(function (error) { fail(error && error.message ? error.message : String(error)); });
 
-  var passes = 0;
-  var busy = false;
-
-  function nextFrame() {
-    return new Promise(function (resolve) { requestAnimationFrame(function () { resolve(); }); });
+  function innerDoc(frame) {
+    try { return frame.contentDocument; } catch (error) { return null; }
   }
 
-  // A rendering opportunity in the CHILD document's own lifecycle, with a
-  // forced layout read inside it so its line boxes are final before the parent
-  // measures them.
-  function innerFrame(inner) {
-    return new Promise(function (resolve) {
-      var view = inner.defaultView;
-      if (!view || typeof view.requestAnimationFrame !== 'function') {
-        setTimeout(resolve, 50);
-        return;
-      }
-      view.requestAnimationFrame(function () {
-        void inner.body.getBoundingClientRect().width;
-        resolve();
-      });
-    });
-  }
-
-  async function pass() {
-    if (failed || busy) return;
-    var inner;
-    try { inner = frame.contentDocument; } catch (error) { return; }
-    if (!inner || !inner.documentElement) return;
-    var innerError = inner.documentElement.getAttribute('data-replay-error');
-    if (innerError) { fail('shipped page: ' + innerError); return; }
-    if (inner.documentElement.getAttribute('data-replay-loaded') !== 'true') return;
-    busy = true;
-    try {
-      mirrorIds.forEach(function (id) {
-        var node = inner.querySelector('#' + id);
-        document.getElementById(id).textContent =
-          node ? (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim() : '';
-      });
-
-      // One canvas size per pass, so all three are exercised. The iframe is
-      // resized FIRST, then two frames are yielded so the inner layout and the
-      // page's own relayout() (which rides the resize event and owns
-      // --hudscale/--band) have both settled before anything is measured.
-      var wh = sizes[sizeIndex];
-      frame.width = wh[0];
-      frame.height = wh[1];
-      // Wait for the CHILD's own rendering steps, not the parent's. Resizing
-      // the <iframe> element updates the child's clientWidth immediately, but
-      // its line breaking is redone on the child's next rendering opportunity;
-      // a parent-side rAF is a different lifecycle, and measuring across that
-      // gap transcribes the WIDE layout's line boxes into the narrow frame --
-      // which is exactly what a 59-character 1240px line reported inside a
-      // 360px canvas is.
-      await innerFrame(inner);
-      await innerFrame(inner);
-      await new Promise(function (resolve) { setTimeout(resolve, 120); });
-      await innerFrame(inner);
-      if (Math.abs(inner.documentElement.clientWidth - wh[0]) > 2) {
-        // The child has not taken the new width yet; try again next tick
-        // rather than measuring a layout that is about to change.
-        return;
-      }
-      var drawn = transcribe(inner, canvases[sizeIndex]);
-      if (drawn === 0) {
-        fail('no text runs found in the shipped chrome at ' + wh[0] + 'x' + wh[1]);
-        return;
-      }
-      sizeIndex = (sizeIndex + 1) % sizes.length;
-      passes++;
-      if (passes >= sizes.length) {
-        document.documentElement.setAttribute('data-replay-loaded', 'true');
-      }
-    } finally {
-      busy = false;
+  setInterval(function () {
+    if (failed) return;
+    var ready = [];
+    for (var i = 0; i < frames.length; i++) {
+      var doc = innerDoc(frames[i]);
+      if (!doc || !doc.documentElement) return;
+      var innerError = doc.documentElement.getAttribute('data-replay-error');
+      if (innerError) { fail('shipped page: ' + innerError); return; }
+      if (doc.documentElement.getAttribute('data-replay-loaded') !== 'true') return;
+      ready.push(doc);
     }
-  }
 
-  setInterval(pass, 200);
+    // The soak reads these; the first (widest) frame is the representative one.
+    mirrorIds.forEach(function (id) {
+      var node = ready[0].querySelector('#' + id);
+      document.getElementById(id).textContent =
+        node ? (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    });
+
+    for (var k = 0; k < ready.length; k++) {
+      var drawn = transcribe(ready[k], canvases[k]);
+      if (drawn === 0) {
+        fail('no text runs found in the shipped chrome at ' +
+             SIZES[k][0] + 'x' + SIZES[k][1]);
+        return;
+      }
+    }
+    if (!announced) {
+      announced = true;
+      document.documentElement.setAttribute('data-replay-loaded', 'true');
+    }
+  }, 200);
 })();
 </script>
 </body>

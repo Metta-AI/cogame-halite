@@ -275,7 +275,10 @@ def test_the_renderer_fixture_loads_the_shipped_page_and_full_cap_notes():
     text = (REPO / "tools" / "ci" / "renderer_fixture.html").read_text()
     assert "./index.html?shim=1" in text, "it must load the SHIPPED page"
     assert "var CAP = 140" in text
-    assert "three canvas sizes" in text or "sizes = [[1240" in text
+    assert "SIZES = [[1240, 700], [900, 560], [360, 640]]" in text, (
+        "three canvas sizes, each in its OWN fixed iframe -- resizing one frame "
+        "races the child's layout lifecycle"
+    )
     assert "fillText" in text, "the DOM runs are transcribed to canvas"
 
 
