@@ -133,13 +133,16 @@
         if (!box.width && !box.height) continue;
         if (clip && (box.right > clip.right + 1 || box.left < clip.left - 1)) continue;
         const rowTop = Math.round(box.top);
+        const ink = data[i].trim().length > 0;
         if (top === null) {
-          top = rowTop; left = box.left; right = box.right; bottom = box.bottom; start = i;
+          top = rowTop; left = box.left; right = ink ? box.right : box.left; bottom = box.bottom; start = i;
         } else if (rowTop !== top) {
           out.push({ text: data.slice(start, i), left, right, bottom, style });
-          top = rowTop; left = box.left; right = box.right; bottom = box.bottom; start = i;
+          top = rowTop; left = box.left; right = ink ? box.right : box.left; bottom = box.bottom; start = i;
         } else {
-          right = Math.max(right, box.right);
+          // Trailing whitespace is laid out but never painted, and Chromium
+          // lets it hang past the content box -- it must not extend the run.
+          if (ink) right = Math.max(right, box.right);
           bottom = Math.max(bottom, box.bottom);
         }
       }
@@ -258,6 +261,10 @@
       var wh = sizes[sizeIndex];
       frame.width = wh[0];
       frame.height = wh[1];
+      // The inner page's relayout() rides the `resize` event, which is
+      // dispatched asynchronously; measuring before it has run reads a stale
+      // --hudscale and a stale #stage.tiny.
+      await new Promise(function (resolve) { setTimeout(resolve, 150); });
       await nextFrame();
       await nextFrame();
       var drawn = transcribe(inner, canvases[sizeIndex]);

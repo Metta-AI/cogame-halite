@@ -1113,15 +1113,26 @@ body[data-embed] #board { top: 0; height: 100%; }
    exactly this. So the halite feed reserves a band sized from that cap and
    wraps inside it. */
 #killfeed {
-  /* Never wider than a third of the frame, whatever --hudscale is doing: at
-     360 px a 300-unit band would be the whole page, and a stale --hudscale
-     between a resize and the next relayout() must not be able to push the band
-     past the right edge. */
-  width: min(calc(300 * var(--u)), 33%);
+  /* The band is bounded by the FRAME, not by --hudscale: `right` plus
+     `max-width` together guarantee a left edge of at least 16 units whatever
+     --hudscale is doing between a resize and the next relayout(). */
+  width: calc(300 * var(--u));
+  max-width: calc(100% - 32 * var(--u));
   right: calc(16 * var(--u));
   max-height: calc(100% - var(--topband, 0px) - var(--band, 0px) - 90 * var(--u));
   overflow: hidden;
 }
+/* Under 640 px the note is most of the frame, so the band spans it explicitly
+   (left AND right pinned, width auto) and the rows stretch to fill it: there
+   is then no content-sized box that can end up wider than the frame. */
+#stage.tiny #killfeed {
+  left: calc(10 * var(--u));
+  right: calc(10 * var(--u));
+  width: auto;
+  max-width: none;
+  align-items: stretch;
+}
+#stage.tiny .feed-row { width: 100%; }
 .feed-row {
   display: block;
   text-align: right;
