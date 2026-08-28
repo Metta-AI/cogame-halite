@@ -34,6 +34,13 @@
   non-zero.
 -->
 <style>
+@font-face {
+  /* The same face the bundle's chrome uses, so the parent document resolves
+     the same family list the iframe does. */
+  font-family: 'rajdhani';
+  src: url('./font.ttf') format('truetype');
+  font-display: block;
+}
   html, body { margin: 0; padding: 0; background: #0b0805; color: #f2e8d8;
                font: 12px/1.4 ui-monospace, Menlo, monospace; }
   #frame-box { border: 0; display: block; }
@@ -105,26 +112,38 @@
       if (!data || !data.trim()) continue;
       const style = doc.defaultView.getComputedStyle(node.parentElement);
       if (style.display === 'none' || style.visibility === 'hidden') continue;
+      // An element that asked for `text-overflow: ellipsis` DRAWS the visible
+      // prefix and an ellipsis; the characters past the clip are laid out but
+      // never painted. Transcribing them would report a defect the viewer does
+      // not have. Everything else is transcribed whole -- a row silently cut
+      // by an overflow:hidden band with no ellipsis IS a defect and stays
+      // visible to the gate.
+      const clip = style.textOverflow === 'ellipsis'
+        ? node.parentElement.getBoundingClientRect()
+        : null;
       let start = 0;
       let top = null;
       let left = 0;
+      let right = 0;
       let bottom = 0;
       for (let i = 0; i < data.length; i++) {
         range.setStart(node, i);
         range.setEnd(node, i + 1);
         const box = range.getBoundingClientRect();
         if (!box.width && !box.height) continue;
+        if (clip && (box.right > clip.right + 1 || box.left < clip.left - 1)) continue;
         const rowTop = Math.round(box.top);
         if (top === null) {
-          top = rowTop; left = box.left; bottom = box.bottom; start = i;
+          top = rowTop; left = box.left; right = box.right; bottom = box.bottom; start = i;
         } else if (rowTop !== top) {
-          out.push({ text: data.slice(start, i), left, bottom, style });
-          top = rowTop; left = box.left; bottom = box.bottom; start = i;
+          out.push({ text: data.slice(start, i), left, right, bottom, style });
+          top = rowTop; left = box.left; right = box.right; bottom = box.bottom; start = i;
         } else {
+          right = Math.max(right, box.right);
           bottom = Math.max(bottom, box.bottom);
         }
       }
-      if (top !== null) out.push({ text: data.slice(start), left, bottom, style });
+      if (top !== null) out.push({ text: data.slice(start), left, right, bottom, style });
     }
     return out;
   }
@@ -152,7 +171,17 @@
       if (!root) continue;
       for (const run of lineRuns(root)) {
         const px = parseFloat(run.style.fontSize) || 12;
-        ctx.font = Math.max(6, px) + 'px ' + (run.style.fontFamily || 'sans-serif');
+        const family = run.style.fontFamily || 'sans-serif';
+        // The canvas must MEASURE the run exactly as the page LAID IT OUT.
+        // The parent document is not the bundle, so it may resolve a different
+        // face for the same family list and measureText would then overstate
+        // every run by 5-20% -- which reads as "text with nowhere to go" for
+        // every right-anchored line in the feed. Scale the font so the drawn
+        // width equals the width the browser actually used.
+        ctx.font = px + 'px ' + family;
+        const measured = ctx.measureText(run.text).width || 1;
+        const laidOut = Math.max(1, run.right - run.left);
+        ctx.font = Math.max(1, px * laidOut / measured) + 'px ' + family;
         ctx.fillText(run.text, run.left, run.bottom);
         drawn++;
       }
