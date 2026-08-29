@@ -35,39 +35,68 @@ PAGE_TEXT = PAGE.read_text()
 #: sha256 of coworld-ctf's own `client/chrome_common.js` and
 #: `client/broadcast_core.js`, recorded from the read-only starter mount this
 #: repo copied them from (`/workspace/starters/coworld-ctf`). The mount does
-#: not exist on a GitHub runner, so without these digests the byte-for-byte
-#: pin was verified only in the sandbox and CI enforced nothing.
-CTF_CHROME_SHA256 = "7ace7287e0d19bf0fddb2362c55e4d76dfb44adcd4fbc8d1743b0557ced72f7c"
+#: not exist on a GitHub runner, so without these digests the pin was verified
+#: only in the sandbox and CI enforced nothing. `broadcast_core.js` is still
+#: the starter file byte for byte; `chrome_common.js` is the starter file plus
+#: exactly the two-line half-speed patch below, so it gets its own digest and
+#: the starter digest stays recorded to keep the patch auditable.
+CTF_STARTER_CHROME_SHA256 = "7ace7287e0d19bf0fddb2362c55e4d76dfb44adcd4fbc8d1743b0557ced72f7c"
+CHROME_SHA256 = "594ed4a72cd908922c982d0f3e3ffb04ae1d97568fcd5f5daa794042662a369c"
 CTF_CORE_SHA256 = "172c4680129d608fd687cfd86436b675eef32c8652be6afe5f3189dd20c5aa9c"
+
+#: The half-speed patch, line for line: (ours, the starter's). Reverting these
+#: two lines must reproduce the starter file exactly — that is what proves the
+#: patch changed NOTHING else (the old byte-for-byte pin, minus two lines).
+CHROME_PATCH = [
+    ("  var SPEEDS = WIRE.speeds || [0.5, 1, 2, 3, 4, 8, 16];",
+     "  var SPEEDS = WIRE.speeds || [1, 2, 3, 4, 8, 16];"),
+    ("    var host = $('speedchips'), map = { 0.5: '5', 1: '1', 2: '2', 3: '3', 4: '4', 8: '8', 16: '6' };",
+     "    var host = $('speedchips'), map = { 1: '1', 2: '2', 3: '3', 4: '4', 8: '8', 16: '6' };"),
+]
+
+
+def unpatched_chrome() -> bytes:
+    """This repo's chrome_common.js with the half-speed patch reverted."""
+    text = CHROME.read_text()
+    for ours, starter in CHROME_PATCH:
+        assert text.count(ours + "\n") == 1, f"patched line missing or duplicated: {ours!r}"
+        text = text.replace(ours + "\n", starter + "\n")
+    return text.encode()
 
 
 @pytest.mark.parametrize(
     "path,digest",
-    [("client/chrome_common.js", CTF_CHROME_SHA256),
+    [("client/chrome_common.js", CHROME_SHA256),
      ("client/broadcast_core.js", CTF_CORE_SHA256)],
 )
-def test_the_chrome_files_hash_to_the_starter_digests(path, digest):
-    """The byte-for-byte pin, enforced WHEREVER the tests run — including CI,
-    where there is no starter mount. Unused ctf helpers stay in the file,
-    unreferenced; deleting from a byte-for-byte copy is precisely what the pin
-    forbids, and a one-character edit moves the digest."""
+def test_the_chrome_files_hash_to_the_recorded_digests(path, digest):
+    """The pin, enforced WHEREVER the tests run — including CI, where there is
+    no starter mount. Unused ctf helpers stay in the file, unreferenced;
+    deleting from a pinned copy is precisely what the pin forbids, and a
+    one-character edit moves the digest."""
     actual = hashlib.sha256((REPO / path).read_bytes()).hexdigest()
     assert actual == digest, (
-        f"{path} is no longer coworld-ctf's file byte for byte "
+        f"{path} no longer matches its recorded pin "
         f"(sha256 {actual}, want {digest})"
     )
 
 
-def test_the_chrome_and_the_compositor_are_the_starter_files_byte_for_byte():
+def test_the_chrome_is_the_starter_file_plus_only_the_half_speed_patch():
+    """Reverting CHROME_PATCH reconstructs coworld-ctf's chrome_common.js
+    byte for byte, so the half-speed patch is provably the only deviation."""
+    assert hashlib.sha256(unpatched_chrome()).hexdigest() == CTF_STARTER_CHROME_SHA256
+
+
+def test_the_chrome_and_the_compositor_match_the_starter_files():
     """And when the starter mount IS present, compare the bytes themselves —
     which is also what proves the digests above were not copied from us."""
     if not CTF.is_dir():
         pytest.skip("the coworld-ctf mount is not present")
-    assert CHROME.read_bytes() == (CTF / "client" / "chrome_common.js").read_bytes()
+    assert unpatched_chrome() == (CTF / "client" / "chrome_common.js").read_bytes()
     assert CORE.read_bytes() == (CTF / "client" / "broadcast_core.js").read_bytes()
     assert hashlib.sha256(
         (CTF / "client" / "chrome_common.js").read_bytes()
-    ).hexdigest() == CTF_CHROME_SHA256
+    ).hexdigest() == CTF_STARTER_CHROME_SHA256
     assert hashlib.sha256(
         (CTF / "client" / "broadcast_core.js").read_bytes()
     ).hexdigest() == CTF_CORE_SHA256
@@ -146,7 +175,8 @@ REMOVED_IDS = [
     "zoom-out", "zoom-read", "zoom-slider", "minimap", "minimap-canvas", "mmwarn",
 ]
 #: chrome_common.js dereferences these unconditionally, and it is pinned
-#: byte-for-byte, so they stay as hidden stubs (see the page's banner comment).
+#: (starter bytes + the half-speed patch, nothing else), so they stay as
+#: hidden stubs (see the page's banner comment).
 STUB_IDS = ["momentum", "lulls", "ffwd-chip", "ffwd-mini"]
 
 
@@ -170,8 +200,8 @@ def test_the_chrome_common_stubs_exist_and_are_never_drawn(element):
 
 
 def test_every_id_chrome_common_dereferences_is_present():
-    """chrome_common.js is byte-for-byte, so a missing node is a TypeError on
-    the first frame."""
+    """chrome_common.js is pinned (starter bytes + the half-speed patch), so a
+    missing node is a TypeError on the first frame."""
     for element in sorted(set(re.findall(r"\$\('([a-z0-9-]+)'\)", CHROME.read_text()))):
         assert f'id="{element}"' in PAGE_TEXT, f"chrome_common.js needs #{element}"
 
@@ -204,6 +234,33 @@ def test_no_overlay_sits_in_the_transport_band():
     block = PAGE_TEXT[PAGE_TEXT.index("HALITE additions"):]
     assert "#transport" not in block.split("<script>")[0].replace(
         "the whole #transport", ""), "the appended CSS must not restyle the transport band"
+
+
+# ------------------------------------------------------------- half speed
+def test_the_half_speed_chip_is_wired_end_to_end():
+    """The 0.5x chip: the chrome offers it (the SPEEDS fallback and the chip
+    command map, i.e. CHROME_PATCH) and the page's command channel maps '5'
+    back to 0.5, which the playhead's float accumulator
+    (`accumulator += dt * speed`) turns into one turn every other 1x period.
+    The behavioural half — chip click, half-rate advance, Space pause — runs
+    in tests/page_dom_harness.mjs under
+    test_the_shipped_page_boots_plays_and_draws_under_a_dom_stub."""
+    chrome = CHROME.read_text()
+    assert "[0.5, 1, 2, 3, 4, 8, 16]" in chrome
+    assert "map = { 0.5: '5', 1: '1'" in chrome
+    assert "'5': 0.5" in PAGE_TEXT, "the page must map command '5' to 0.5x"
+
+
+def test_space_pauses_on_the_shipped_page():
+    """The bundle ships exactly one page (viewer/build_viewer.sh copies
+    client/replay_broadcast.html to index.html; there is no shell page), and
+    that page binds Space to play/pause with preventDefault so the key never
+    scrolls the stage instead."""
+    handler = PAGE_TEXT[PAGE_TEXT.index("document.addEventListener('keydown'"):]
+    handler = handler[: handler.index("});")]
+    assert "ev.key === ' '" in handler
+    assert "ev.preventDefault()" in handler
+    assert "playing = !playing" in handler
 
 
 # ------------------------------------------------------------ scrubber beats
@@ -412,6 +469,12 @@ def test_the_shipped_page_boots_plays_and_draws_under_a_dom_stub(tmp_path):
     assert report["beats"] >= 5
     assert report["feed_lines"] > 0
     assert report["startedBytes"] == fixture.stat().st_size
+    # The harness clicks the 0.5x chip, restarts, and counts turns over
+    # 3200 ms of driven rAF: ~12 at half speed where 1x would take ~25. It
+    # also proves Space pauses and resumes (space_pause is only emitted after
+    # both checks pass).
+    assert 10 <= report["half_speed_turns"] <= 15
+    assert report["space_pause"] is True
 
 
 def test_ci_gates_the_renderer_fixture_on_a_non_vacuous_text_count():

@@ -5,7 +5,7 @@
 // stub run catches the failure that gate cannot report cheaply: a throw in the
 // boot path, a scorebug that never builds, a scrubber with no beats, or
 // playback that does not advance. static_replay.js (the wasm half) is stubbed;
-// EVERYTHING else -- chrome_common.js byte-for-byte and the page's own block --
+// EVERYTHING else -- the pinned chrome_common.js and the page's own block --
 // is the shipped code.
 //
 //   node tests/page_dom_harness.mjs <repo-root> <replay.json>
@@ -123,7 +123,7 @@ globalThis.HaliteStaticReplay = {
 
 function fail(message) { console.error('FAIL: ' + message); process.exit(1); }
 
-// chrome_common.js byte-for-byte, then the page's own block.
+// The pinned chrome_common.js, then the page's own block.
 const page = readFileSync(join(root, 'client/replay_broadcast.html'), 'utf8');
 const block = page.match(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/)[1];
 (0, eval)(readFileSync(join(root, 'client/chrome_common.js'), 'utf8'));
@@ -166,6 +166,48 @@ if (!commands.some((c) => /^s:\d+$/.test(c))) fail('the renderer was never told 
 const feed = document.getElementById('killfeed');
 if (!feed.children.length) fail('the event feed drew nothing');
 
+// Half speed and Space, driven through the shipped chrome. The 0.5x chip the
+// chrome builds sends '5' down the command channel, ',' restarts playback
+// from turn 0, and 100 frames at 32 ms (3200 ms) then advance ~12 turns
+// (3200 * 0.5 / 125) where 1x would take ~25.
+const lastTurn = () => {
+  const seeks = commands.filter((c) => /^s:\d+$/.test(c));
+  return seeks.length ? Number(seeks[seeks.length - 1].slice(2)) : -1;
+};
+const drive = (count) => {
+  for (let i = 0; i < count && frames.length; i++) {
+    const fn = frames.shift();
+    now += 32;
+    fn(now);
+  }
+};
+const keydown = (key) => {
+  let prevented = false;
+  (documentListeners.keydown || []).forEach((fn) => {
+    fn({ key, preventDefault() { prevented = true; } });
+  });
+  return prevented;
+};
+const chips = document.getElementById('speedchips').children;
+const halfChip = chips.find((c) => c.text === '0.5×');
+if (!halfChip) fail('the chrome built no 0.5x speed chip');
+(halfChip.listeners.click || []).forEach((fn) => fn());
+if (!halfChip.classList.contains('on')) fail('clicking the 0.5x chip did not select it');
+keydown(',');
+if (lastTurn() !== 0) fail('the , restart did not seek to turn 0');
+drive(100);
+const halfTurns = lastTurn();
+if (halfTurns < 10 || halfTurns > 15) {
+  fail(`0.5x advanced ${halfTurns} turns over 3200 ms, want ~12 (1x would be ~25)`);
+}
+if (!keydown(' ')) fail('Space did not preventDefault');
+const pausedAt = lastTurn();
+drive(30);
+if (lastTurn() !== pausedAt) fail('Space did not pause playback');
+if (!keydown(' ')) fail('the second Space did not preventDefault');
+drive(30);
+if (lastTurn() <= pausedAt) fail('the second Space did not resume playback');
+
 console.log(JSON.stringify({
   loaded: true,
   startedBytes: started,
@@ -175,4 +217,6 @@ console.log(JSON.stringify({
   clock: after.clock,
   tick: after.tick,
   commands: commands.length,
+  half_speed_turns: halfTurns,
+  space_pause: true,
 }));
