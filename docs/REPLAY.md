@@ -82,7 +82,7 @@ notes through the whole path and parses the result with `bytes.decode("utf-8")`
 
 ```
 index.html                      client/replay_broadcast.html
-chrome_common.js                coworld-ctf, BYTE-FOR-BYTE
+chrome_common.js                coworld-ctf + the two-line half-speed patch
 broadcast_core.js               coworld-ctf, BYTE-FOR-BYTE (loaded by the Worker only)
 static_replay.js                coworld-ctf + the four documented adaptations
 static_replay_worker.js         coworld-ctf + the four documented adaptations
@@ -139,7 +139,8 @@ message is posted from a `MutationObserver` callback that fires **after**
   chip from `stop.rule`.
 * **Playback.** 125 ms per turn at 1× (a 400-turn episode plays in 50 s; the
   120-turn CI fixture in 15 s, which outlasts the 12 s viewer soak), speeds
-  from the inherited chrome.
+  from the inherited chrome plus a 0.5× half speed (command `5`); Space
+  pauses and resumes.
 * **Legible at 360 px wide.** A stated acceptance property, checked by
   `viewer_smoke.mjs` through `tools/ci/narrow_fixture.html` as well as at
   desktop size, and by `tools/ci/renderer_fixture.html` at three canvas sizes

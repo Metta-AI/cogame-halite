@@ -7,7 +7,7 @@
 #   static_replay.js,
 #   static_replay_worker.js          page <-> Worker glue (coworld-ctf, 3 adaptations)
 #   broadcast_core.js                Bitworld sprite-protocol compositor (ctf, verbatim)
-#   chrome_common.js                 shared replay chrome (ctf, BYTE-FOR-BYTE)
+#   chrome_common.js                 shared replay chrome (ctf + half-speed patch)
 #   font.ttf                         the Rajdhani face the chrome's @font-face loads
 #
 # Runs locally (nim + emcc on PATH, packages synced with

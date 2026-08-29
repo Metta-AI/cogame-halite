@@ -1002,8 +1002,10 @@ body[data-embed] #board { top: 0; height: 100%; }
      ============================================================
      Everything above this banner is coworld-ctf's classic broadcast page:
      its palette and typography tokens, its stage/board/scorebug/feed/
-     transport/endcard CSS and DOM, verbatim, with client/chrome_common.js and
-     client/broadcast_core.js copied BYTE-FOR-BYTE, and
+     transport/endcard CSS and DOM, verbatim, with client/broadcast_core.js
+     copied BYTE-FOR-BYTE, client/chrome_common.js the starter file plus only
+     the two-line half-speed patch (0.5 in the SPEEDS fallback, 0.5 -> '5' in
+     the chip command map; tests/test_viewer.py pins both digests), and
      replay-viewer/static_replay{,_worker}.js + replay-viewer/config.nims taken
      from the same starter so the emscripten link flags and the JS bootstrap
      can never disagree (cogame-lantern, 2026-08-23).
@@ -1207,7 +1209,7 @@ button.beat-marker {
 #endcard .ec-stat b { color: var(--paper); font-weight: 600; }
 
 /* The four chrome_common.js stubs (see the banner comment): present so the
-   byte-for-byte shared chrome can dereference them, never drawn. */
+   pinned shared chrome can dereference them, never drawn. */
 #momentum, #lulls, #ffwd-chip, #ffwd-mini { display: none !important; }
 </style>
 </head>
@@ -1288,8 +1290,8 @@ button.beat-marker {
 (function () {
   'use strict';
 
-  // The shared replay chrome (chrome_common.js, byte-for-byte from
-  // coworld-ctf). It owns the transport band contract: --band/--topband/
+  // The shared replay chrome (chrome_common.js, coworld-ctf's file plus the
+  // half-speed patch). It owns the transport band contract: --band/--topband/
   // --hudscale on :root, the scrubber geometry, the spoiler gate and the
   // verdict cap.
   if (!window.ChromeCommon) {
@@ -1679,7 +1681,7 @@ button.beat-marker {
   function advance(delta) { seek(turnIndex + delta); }
 
   function transportCommand(cmd) {
-    var map = { '1': 1, '2': 2, '3': 3, '4': 4, '8': 8, '6': 16 };
+    var map = { '5': 0.5, '1': 1, '2': 2, '3': 3, '4': 4, '8': 8, '6': 16 };
     if (map[cmd]) { speed = map[cmd]; render(); return; }
     if (cmd === '.') advance(5);
     else if (cmd === 'b') advance(-1);
