@@ -26,5 +26,22 @@ uv run --package metta-posttrain --extra train python -m metta_posttrain.train \
   --model Qwen/Qwen3-0.6B --max-steps 100 --max-length 4096
 ```
 
-The game is fully observable. Numeric Metta RL and PufferLib training need a
-bounded codec for this game's directive fields.
+The game is fully observable.
+
+## Numeric reinforcement learning
+
+`tools/train_bridge.py` exposes 1,788 values from the public board, fleets,
+and standings. Seven action heads cover every structured directive field.
+All four seats choose against one pre-turn state. The production simulator
+then executes their directives until the next decision turn.
+
+```sh
+uv run python tools/test_train_bridge.py
+```
+
+From a Metta checkout with the Coworld training stack, pass the bridge command
+`python /absolute/path/to/tools/train_bridge.py`, an absolute manifest path,
+and the variant ID to `recipes.external.coworld.train` for native PufferLib or
+`recipes.external.coworld_metta_rl.train` for Metta RL. Use `players=4`,
+`max_decisions=80`, and a timestep limit. The bridge also publishes the hosted
+observation as `semantic_view` and `messages`.
