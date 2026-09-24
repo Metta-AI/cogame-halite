@@ -66,6 +66,9 @@ jobs:
       - name: Run the test suite
         run: uv run pytest -q
 
+      - name: Export complete training episodes
+        run: uv run python tools/test_posttrain.py
+
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real 4-seat episode
   # runs end to end in raw docker with the certification fixture's seat mix.
