@@ -13,3 +13,4 @@ the other's cargo. Most banked halite at turn 400 wins.
 * Replay format + viewer contract: [`docs/REPLAY.md`](docs/REPLAY.md)
 * Design note: [`docs/plans/2026-08-27-halite-design.md`](docs/plans/2026-08-27-halite-design.md)
 * Working conventions: [`AGENTS.md`](AGENTS.md)
+* Post-training: [`TRAINING.md`](TRAINING.md)
