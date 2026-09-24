@@ -460,7 +460,7 @@
     "docs": {
       "readme": {
         "type": "text",
-        "value": "# cogame-halite\n\nA **four-seat, free-for-all economy race with physical risk on every move**: a\nbit-exact Coworld port of **Kaggle's Halite IV** (`kaggle-environments`, Two\nSigma seasons I–IV).\n\nFour fleets mine a 21 × 21 torus of halite, haul it home to their shipyards,\nand ram each other — the ship carrying *less* survives the collision and takes\nthe other's cargo. Most banked halite at turn 400 wins.\n\n* Rules and bit-exactness: [`docs/RULES.md`](docs/RULES.md)\n* Wire protocol: [`docs/PROTOCOL.md`](docs/PROTOCOL.md)\n* Replay format + viewer contract: [`docs/REPLAY.md`](docs/REPLAY.md)\n* Design note: [`docs/plans/2026-08-27-halite-design.md`](docs/plans/2026-08-27-halite-design.md)\n* Working conventions: [`AGENTS.md`](AGENTS.md)\n"
+        "value": "# cogame-halite\n\nA **four-seat, free-for-all economy race with physical risk on every move**: a\nbit-exact Coworld port of **Kaggle's Halite IV** (`kaggle-environments`, Two\nSigma seasons I–IV).\n\nFour fleets mine a 21 × 21 torus of halite, haul it home to their shipyards,\nand ram each other — the ship carrying *less* survives the collision and takes\nthe other's cargo. Most banked halite at turn 400 wins.\n\n* Rules and bit-exactness: [`docs/RULES.md`](docs/RULES.md)\n* Wire protocol: [`docs/PROTOCOL.md`](docs/PROTOCOL.md)\n* Replay format + viewer contract: [`docs/REPLAY.md`](docs/REPLAY.md)\n* Design note: [`docs/plans/2026-08-27-halite-design.md`](docs/plans/2026-08-27-halite-design.md)\n* Working conventions: [`AGENTS.md`](AGENTS.md)\n* Post-training: [`TRAINING.md`](TRAINING.md)\n"
       },
       "pages": [
         {
