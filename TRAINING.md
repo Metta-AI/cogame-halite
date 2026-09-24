@@ -45,3 +45,15 @@ and the variant ID to `recipes.external.coworld.train` for native PufferLib or
 `recipes.external.coworld_metta_rl.train` for Metta RL. Use `players=4`,
 `max_decisions=80`, and a timestep limit. The bridge also publishes the hosted
 observation as `semantic_view` and `messages`.
+
+All three variants completed 512 Metta RL timesteps. A native PufferLib run
+on one RTX 4090 completed 4,096 timesteps per variant, saved checkpoints,
+reloaded them, and evaluated four games on each held-out seed:
+
+| Variant | Seed 101 score | Seed 102 score |
+| --- | ---: | ---: |
+| standard | 0.250 | 0.833 |
+| sprint | 0.000 | 0.167 |
+| richfields | 0.917 | 1.000 |
+
+These short runs verify the training and reload paths, not policy quality.
