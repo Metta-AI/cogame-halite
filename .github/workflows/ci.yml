@@ -69,6 +69,9 @@ jobs:
       - name: Export complete training episodes
         run: uv run python tools/test_posttrain.py
 
+      - name: Train bridge complete games
+        run: uv run python tools/test_train_bridge.py
+
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real 4-seat episode
   # runs end to end in raw docker with the certification fixture's seat mix.
