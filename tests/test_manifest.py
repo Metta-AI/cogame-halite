@@ -267,7 +267,7 @@ def test_policies_json_is_two_llm_champions_and_two_scripted_fillers():
     assert len(champions) == 2 and len(fillers) == 2
     # A scripted policy seated as a champion is a FAILURE state.
     for row in champions:
-        assert row["env"]["USE_BEDROCK"] == "true"
+        assert "USE_BEDROCK" not in row["env"]
         assert "PLAYER_SCRIPTED" not in row["env"]
     assert champions[0]["env"]["PLAYER_PROMPT"] != champions[1]["env"]["PLAYER_PROMPT"]
     # Champion #2 must be uploaded while daveey-1 is the active player.
@@ -285,13 +285,15 @@ def test_no_scaffold_placeholder_survives_in_a_workflow(workflow):
         assert placeholder not in text, f"{workflow} still carries {placeholder}"
 
 
-def test_the_release_workflow_exposes_the_four_inputs_and_the_artifact():
+def test_the_release_workflow_exposes_inputs_and_native_llm_upload():
     text = (REPO / ".github" / "workflows" / "coworld-release.yml").read_text()
-    for name in ("version:", "policies:", "put_secret:", "skip_certify:"):
+    for name in ("version:", "policies:", "skip_certify:"):
         assert name in text
     assert "name: release-result" in text
     assert '"player"' in text or "player_id" in text, "the per-policy player field"
-    assert "secret put" in text
+    assert "secret put" not in text
+    assert "--use-llm" in text
+    assert "--llm-model" in text
 
 
 def test_the_submit_workflow_exposes_its_three_inputs_and_the_artifact():
