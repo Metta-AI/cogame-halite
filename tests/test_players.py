@@ -26,7 +26,8 @@ def clean_env(monkeypatch):
     for key in (
         "PLAYER_PROMPT",
         "PLAYER_SCRIPTED",
-        "USE_BEDROCK",
+        "COWORLD_LLM_ENDPOINT",
+        "COWORLD_LLM_MODEL",
         "ANTHROPIC_API_KEY",
         "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
         "AWS_BEARER_TOKEN_BEDROCK",
@@ -62,59 +63,43 @@ def test_player_prompt_makes_an_llm_seat(monkeypatch):
     assert policy.llm is not None
 
 
-def test_use_bedrock_is_what_attaches_the_sidecar(monkeypatch):
+def test_the_native_endpoint_enables_the_sidecar(monkeypatch):
     """The cogolf 2026-08-24 scar: PLAYER_PROMPT alone gets no Bedrock sidecar
     and the seat silently plays scripted."""
     monkeypatch.setenv("PLAYER_PROMPT", "x")
     assert llm.Provider().available is False
-    monkeypatch.setenv("USE_BEDROCK", "true")
+    monkeypatch.setenv("COWORLD_LLM_ENDPOINT", "http://127.0.0.1:9100")
     assert llm.Provider().available is True
 
 
-def test_every_llm_policy_in_policies_json_carries_use_bedrock():
+def test_prompt_policy_uploads_attach_the_native_sidecar():
+    release = (REPO / ".github/workflows/coworld-release.yml").read_text()
+    assert '"--use-llm"' in release
     rows = json.loads((REPO / "tools" / "ci" / "policies.json").read_text())
-    for row in rows:
-        env = row["env"]
-        if "PLAYER_PROMPT" in env:
-            assert env.get("USE_BEDROCK") == "true", f"{row['name']} has no USE_BEDROCK"
+    assert all("USE_BEDROCK" not in row["env"] for row in rows)
 
 
 # ------------------------------------------------------------- LLM transport
-def test_use_bedrock_targets_the_episode_sidecar_never_aws(monkeypatch):
-    """The halite 0.1.0 scar (phase-60 check 4): the provider built
-    ``AnthropicBedrock()``, which signs for the real AWS Bedrock endpoint. The
-    player pod has no AWS credentials, so every call came back
-    ``403 Invalid API Key format`` and all 40 champion notes were scripted. The
-    platform's transport is the loopback episode sidecar."""
-    monkeypatch.setenv("USE_BEDROCK", "true")
-    client = llm.Provider()._ensure()
-    assert isinstance(client, llm.BedrockSidecar)
-    assert client.invoke_url(llm.MODEL) == (
-        "http://127.0.0.1:9100/model/"
-        "us.anthropic.claude-haiku-4-5-20251001-v1:0/invoke"
-    )
-    assert "AnthropicBedrock(" not in (REPO / "players" / "llm.py").read_text(), (
-        "the SDK's Bedrock client cannot reach the sidecar"
-    )
+def test_native_endpoint_overrides_local_provider_credentials(monkeypatch):
+    monkeypatch.setenv("COWORLD_LLM_ENDPOINT", "http://10.0.0.9:8080/")
+    monkeypatch.setenv("COWORLD_LLM_MODEL", "anthropic/claude-sonnet-4.6")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "local-key-must-not-be-used")
+    provider = llm.Provider()
+    client = provider._ensure()
+    assert str(client.base_url) == "http://10.0.0.9:8080"
+    assert client.api_key == "sidecar"
+    assert provider.model == "anthropic/claude-sonnet-4.6"
 
 
-def test_the_sidecar_endpoint_is_overridable(monkeypatch):
-    monkeypatch.setenv("USE_BEDROCK", "true")
-    monkeypatch.setenv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "http://10.0.0.9:8080/")
-    client = llm.Provider()._ensure()
-    assert client.invoke_url("m") == "http://10.0.0.9:8080/model/m/invoke"
-
-
-def test_without_use_bedrock_an_api_key_still_builds_the_anthropic_client(monkeypatch):
+def test_local_key_builds_the_anthropic_client(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     provider = llm.Provider()
-    assert provider.available is True
-    client = provider._ensure()
-    assert not isinstance(client, llm.BedrockSidecar)
-    assert type(client).__name__ == "Anthropic"
+    assert provider.available
+    assert provider.model == "claude-haiku-4-5-20251001"
+    assert str(provider._ensure().base_url) == "https://api.anthropic.com"
 
 
-async def test_a_bedrock_completion_posts_invoke_to_the_sidecar(monkeypatch):
+async def test_a_native_completion_posts_messages_to_the_sidecar(monkeypatch):
     """End to end over real HTTP: the URL, the bearer header and the
     ``anthropic_version`` body the sidecar requires."""
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -145,8 +130,8 @@ async def test_a_bedrock_completion_posts_invoke_to_the_sidecar(monkeypatch):
     thread.start()
     try:
         host, port = server.server_address[0], server.server_address[1]
-        monkeypatch.setenv("USE_BEDROCK", "true")
-        monkeypatch.setenv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", f"http://{host}:{port}")
+        monkeypatch.setenv("COWORLD_LLM_ENDPOINT", "http://127.0.0.1:9100")
+        monkeypatch.setenv("COWORLD_LLM_ENDPOINT", f"http://{host}:{port}/")
         monkeypatch.setenv("AWS_BEARER_TOKEN_BEDROCK", "sidecar-token")
         text = await llm.Provider().complete("prompt", 5.0)
     finally:
@@ -155,25 +140,27 @@ async def test_a_bedrock_completion_posts_invoke_to_the_sidecar(monkeypatch):
         thread.join(timeout=5)
 
     assert text == "{}"
-    assert seen["path"] == f"/model/{llm.MODEL}/invoke"
-    assert seen["authorization"] == "Bearer sidecar-token"
-    assert seen["body"]["anthropic_version"] == "bedrock-2023-05-31"
+    assert seen["path"] == "/v1/messages"
+    assert seen["authorization"] is None
+    assert "anthropic_version" not in seen["body"]
+    assert seen["body"]["model"] == llm.MODEL
     assert seen["body"]["max_tokens"] == llm.MAX_TOKENS
     assert seen["body"]["messages"] == [{"role": "user", "content": "prompt"}]
 
 
 async def test_a_sidecar_error_names_the_url_and_stays_within_the_deadline(monkeypatch):
-    monkeypatch.setenv("USE_BEDROCK", "true")
+    monkeypatch.setenv("COWORLD_LLM_ENDPOINT", "http://127.0.0.1:9100")
     # A closed loopback port: connection refused, not a hang.
-    monkeypatch.setenv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "http://127.0.0.1:1")
-    with pytest.raises(RuntimeError) as excinfo:
+    monkeypatch.setenv("COWORLD_LLM_ENDPOINT", "http://127.0.0.1:1")
+    from anthropic import APIConnectionError
+    with pytest.raises(APIConnectionError) as excinfo:
         await llm.Provider().complete("prompt", 5.0)
-    assert f"POST http://127.0.0.1:1/model/{llm.MODEL}/invoke" in str(excinfo.value)
+    assert str(excinfo.value.request.url) == "http://127.0.0.1:1/v1/messages"
 
 
 # --------------------------------------------------------------- the model
 def test_the_model_pins_match_the_design_note():
-    assert llm.MODEL == "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    assert llm.MODEL == "anthropic/claude-haiku-4.5"
     assert llm.MAX_TOKENS == 900, "400 truncates: 'cut off at max_tokens'"
     source = (REPO / "players" / "llm.py").read_text()
     assert "output_config=" not in source, "Haiku 4.5 rejects output_config.effort"
@@ -317,7 +304,7 @@ def test_a_lone_surrogate_is_scrubbed_not_carried():
 class FailingProvider(llm.Provider):
     def __init__(self, failures: int, reply: str = '{"stance":"raid","note":"hunting"}'):
         super().__init__()
-        self.use_bedrock = True
+        self.endpoint = "http://test-sidecar"
         self.failures = failures
         self.reply = reply
         self.calls = 0
@@ -410,7 +397,7 @@ async def test_the_player_answers_bounded_legal_orders_on_a_micro_turn(monkeypat
 
 async def test_an_llm_seat_answers_within_the_deadline_when_the_provider_dies(monkeypatch):
     monkeypatch.setenv("PLAYER_PROMPT", "prompt")
-    monkeypatch.setenv("USE_BEDROCK", "true")
+    monkeypatch.setenv("COWORLD_LLM_ENDPOINT", "http://127.0.0.1:9100")
     policy = HalitePolicy()
     policy.llm = llm.DirectiveClient("prompt", FailingProvider(9))
     reply = await asyncio.wait_for(policy.orders(base_observation(0)), 5.0)
