@@ -91,8 +91,10 @@ behaviour changes: failing test first, then the implementation.
 ## Art
 
 `data/art/` is committed, generated once from the committed source sheets in
-`scripts/art/source/` (nano-banana / `gemini-2.5-flash-image`, see
-`playbooks/art-nanobanana.md`) by `scripts/art/split_art_sheets.py`. CI does not
+`scripts/art/source/` by `scripts/art/split_art_sheets.py`. The original sheets
+used nano-banana / `gemini-2.5-flash-image`; their generation recipe is not
+included in this checkout. Preserve the sheets and record generation details
+with any replacement. CI does not
 regenerate art. Re-running the split script must reproduce the same files.
 
 ## Coworld platform contract
